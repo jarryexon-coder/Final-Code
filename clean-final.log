@@ -1,0 +1,150 @@
+Starting NBA Fantasy AI - Complete Consolidated Server v4.1
+❌ Missing required environment variables: [
+  'BALLDONTLIE_API_KEY',
+  'THE_ODDS_API_KEY',
+  'RAPIDAPI_KEY_PLAYER_PROPS',
+  'RAPIDAPI_KEY_PREDICTIONS'
+]
+⚠️ Sports Scheduler not available, continuing without it: Missing environment variables: BALLDONTLIE_API_KEY, THE_ODDS_API_KEY, RAPIDAPI_KEY_PLAYER_PROPS, RAPIDAPI_KEY_PREDICTIONS
+🔒 CORS Configuration:
+Allowed origins: 4 origins
+✅ Firebase Admin SDK initialized
+✅ Firebase Admin SDK initialized
+✅ Route modules loaded successfully
+✅ Promo routes loaded (enhanced version)
+✅ Influencer routes loaded
+🚀 Server is running on port 3000
+🏀 NBA Fantasy AI Assistant v4.1 - Complete Consolidated Server!
+🔐 Authentication: JWT + MongoDB
+⭐ Route Modules: Integrated from routes/ directory
+📡 Real-time: WebSocket Live Updates
+🏀 Sports Scheduler: Integrated
+💰 Stripe integration: Active
+🔥 Firebase integration: Active
+📊 Analytics endpoints: Active
+🎯 Fantasy endpoints: Enhanced with team management
+🎲 Betting endpoints: AI-powered insights
+🤖 AI Prediction service: Active
+🌐 Domain: http://localhost:3000
+📊 Environment: development
+✅ CRITICAL ENDPOINTS AVAILABLE:
+   • GET /api/nba/games/today
+   • GET /api/nba/fantasy/advice
+   • GET /api/nba/players/search
+   • GET /api/nba/player/:playerName
+   • GET /api/influencer/health
+   • GET /api/influencer/directory/public
+✅ MongoDB connected successfully
+📥 GET /health - 2025-12-05T06:03:42.257Z
+[DEBUG] GET /health - 2025-12-05T06:03:42.261Z
+📤 GET /health - 200 - 8ms
+📥 GET /api/influencer/health - 2025-12-05T06:03:42.342Z
+[DEBUG] GET /api/influencer/health - 2025-12-05T06:03:42.342Z
+[DEBUG INFLUENCER] Route hit: GET /api/influencer/health
+📤 GET /api/influencer/health - 200 - 1ms
+📥 GET /api/influencer/directory/public - 2025-12-05T06:03:42.396Z
+[DEBUG] GET /api/influencer/directory/public - 2025-12-05T06:03:42.396Z
+[DEBUG INFLUENCER] Route hit: GET /api/influencer/directory/public
+📤 GET /api/influencer/directory/public - 200 - 0ms
+📥 GET /api/promo/health - 2025-12-05T06:03:42.453Z
+[DEBUG] GET /api/promo/health - 2025-12-05T06:03:42.453Z
+📤 GET /api/promo/health - 200 - 0ms
+📥 GET /api/nba/games/today - 2025-12-05T06:03:42.507Z
+[DEBUG] GET /api/nba/games/today - 2025-12-05T06:03:42.507Z
+📤 GET /api/nba/games/today - 200 - 1ms
+📥 GET /health - 2025-12-05T06:10:47.208Z
+[DEBUG] GET /health - 2025-12-05T06:10:47.209Z
+📤 GET /health - 200 - 3ms
+📥 GET /api/influencer/health - 2025-12-05T06:10:47.298Z
+[DEBUG] GET /api/influencer/health - 2025-12-05T06:10:47.298Z
+[DEBUG INFLUENCER] Route hit: GET /api/influencer/health
+📤 GET /api/influencer/health - 200 - 1ms
+📥 GET /api/promo/health - 2025-12-05T06:10:47.353Z
+[DEBUG] GET /api/promo/health - 2025-12-05T06:10:47.353Z
+📤 GET /api/promo/health - 200 - 1ms
+📥 GET /api/nba/games/today - 2025-12-05T06:10:47.409Z
+[DEBUG] GET /api/nba/games/today - 2025-12-05T06:10:47.409Z
+📤 GET /api/nba/games/today - 200 - 1ms
+📥 GET /api/monitoring/health - 2025-12-05T06:15:55.200Z
+[DEBUG] GET /api/monitoring/health - 2025-12-05T06:15:55.201Z
+📤 GET /api/monitoring/health - 200 - 12ms
+📥 GET /api/promo/health - 2025-12-05T06:15:55.283Z
+[DEBUG] GET /api/promo/health - 2025-12-05T06:15:55.283Z
+📤 GET /api/promo/health - 200 - 1ms
+📥 GET /api/influencer/health - 2025-12-05T06:15:55.337Z
+[DEBUG] GET /api/influencer/health - 2025-12-05T06:15:55.337Z
+[DEBUG INFLUENCER] Route hit: GET /api/influencer/health
+📤 GET /api/influencer/health - 200 - 1ms
+📥 GET /api/nba/games/today - 2025-12-05T06:15:55.392Z
+[DEBUG] GET /api/nba/games/today - 2025-12-05T06:15:55.392Z
+📤 GET /api/nba/games/today - 200 - 1ms
+📥 GET /api/nba/players - 2025-12-05T06:15:55.446Z
+[DEBUG] GET /api/nba/players - 2025-12-05T06:15:55.446Z
+📤 GET /api/nba/players - 404 - 2ms
+📥 GET /api/nba/betting/odds - 2025-12-05T06:15:55.500Z
+[DEBUG] GET /api/nba/betting/odds - 2025-12-05T06:15:55.500Z
+❌ Missing required environment variables: [
+  'BALLDONTLIE_API_KEY',
+  'THE_ODDS_API_KEY',
+  'RAPIDAPI_KEY_PLAYER_PROPS',
+  'RAPIDAPI_KEY_PREDICTIONS'
+]
+❌ Betting odds error: Missing environment variables: BALLDONTLIE_API_KEY, THE_ODDS_API_KEY, RAPIDAPI_KEY_PLAYER_PROPS, RAPIDAPI_KEY_PREDICTIONS
+📤 GET /api/nba/betting/odds - 500 - 7ms
+📥 GET /api/nba/fantasy/advice - 2025-12-05T06:15:55.555Z
+[DEBUG] GET /api/nba/fantasy/advice - 2025-12-05T06:15:55.555Z
+📊 Fantasy advice endpoint hit
+📤 GET /api/nba/fantasy/advice - 200 - 0ms
+📥 GET /api/promo/public - 2025-12-05T06:15:55.609Z
+[DEBUG] GET /api/promo/public - 2025-12-05T06:15:55.609Z
+GET /api/promo/public called
+Found 5 public promo codes
+📤 GET /api/promo/public - 200 - 38ms
+📥 GET /api/promo/public - 2025-12-05T06:15:56.689Z
+[DEBUG] GET /api/promo/public - 2025-12-05T06:15:56.689Z
+GET /api/promo/public called
+Found 5 public promo codes
+📤 GET /api/promo/public - 200 - 3ms
+📥 GET /api/promo/public - 2025-12-05T06:15:57.769Z
+[DEBUG] GET /api/promo/public - 2025-12-05T06:15:57.769Z
+GET /api/promo/public called
+Found 5 public promo codes
+📤 GET /api/promo/public - 200 - 2ms
+📥 GET /api/nba/players - 2025-12-05T06:22:12.506Z
+[DEBUG] GET /api/nba/players - 2025-12-05T06:22:12.507Z
+📤 GET /api/nba/players - 404 - 2ms
+📥 GET /api/nba/betting/odds - 2025-12-05T06:22:12.580Z
+[DEBUG] GET /api/nba/betting/odds - 2025-12-05T06:22:12.580Z
+✅ Serving from cache: /api/nba/betting/odds
+📤 GET /api/nba/betting/odds - 200 - 0ms
+📥 GET /api/nba/fantasy/advice - 2025-12-05T06:22:12.633Z
+[DEBUG] GET /api/nba/fantasy/advice - 2025-12-05T06:22:12.633Z
+📊 Fantasy advice endpoint hit
+📤 GET /api/nba/fantasy/advice - 200 - 1ms
+📥 GET /health - 2025-12-05T06:22:54.301Z
+[DEBUG] GET /health - 2025-12-05T06:22:54.302Z
+📤 GET /health - 200 - 3ms
+📥 GET /api/nba/fantasy/advice - 2025-12-05T06:23:01.088Z
+[DEBUG] GET /api/nba/fantasy/advice - 2025-12-05T06:23:01.088Z
+📊 Fantasy advice endpoint hit
+📤 GET /api/nba/fantasy/advice - 200 - 1ms
+📥 GET /api/nba/games/today - 2025-12-05T06:23:10.340Z
+[DEBUG] GET /api/nba/games/today - 2025-12-05T06:23:10.340Z
+📤 GET /api/nba/games/today - 200 - 1ms
+📥 GET /api/promo/public - 2025-12-05T06:23:12.479Z
+[DEBUG] GET /api/promo/public - 2025-12-05T06:23:12.479Z
+GET /api/promo/public called
+Found 5 public promo codes
+📤 GET /api/promo/public - 200 - 32ms
+📥 GET /api/influencer/1/analytics - 2025-12-05T06:23:15.531Z
+[DEBUG] GET /api/influencer/1/analytics - 2025-12-05T06:23:15.531Z
+[DEBUG INFLUENCER] Route hit: GET /api/influencer/1/analytics
+📤 GET /api/influencer/1/analytics - 200 - 2ms
+📥 POST /api/influencer/generate-code - 2025-12-05T06:23:30.413Z
+[DEBUG] POST /api/influencer/generate-code - 2025-12-05T06:23:30.437Z
+[DEBUG INFLUENCER] Route hit: POST /api/influencer/generate-code
+📤 POST /api/influencer/generate-code - 200 - 25ms
+📥 GET /api/influencer/1/analytics - 2025-12-05T06:23:30.476Z
+[DEBUG] GET /api/influencer/1/analytics - 2025-12-05T06:23:30.476Z
+[DEBUG INFLUENCER] Route hit: GET /api/influencer/1/analytics
+📤 GET /api/influencer/1/analytics - 200 - 1ms

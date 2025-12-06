@@ -1,0 +1,211 @@
+# NBA Fantasy Pro - Promo Code & Influencer System
+
+## Database Schema Updates
+
+```sql
+-- Add promo system tables
+CREATE TABLE IF NOT EXISTS promo_codes (
+  id SERIAL PRIMARY KEY,
+  code VARCHAR(50) UNIQUE NOT NULL,
+  description TEXT,
+  discount_type VARCHAR(20) NOT NULL CHECK (discount_type IN ('percentage', 'fixed', 'trial')),
+  discount_value DECIMAL(10,2) NOT NULL,
+  max_uses INTEGER DEFAULT NULL,
+  uses_count INTEGER DEFAULT 0,
+  influencer_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  is_public BOOLEAN DEFAULT true,
+  active BOOLEAN DEFAULT true,
+  starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS promo_usage (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  promo_code_id INTEGER REFERENCES promo_codes(id) ON DELETE CASCADE,
+  applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  discount_applied DECIMAL(10,2),
+  metadata JSONB DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS influencer_commissions (
+  id SERIAL PRIMARY KEY,
+  influencer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  referred_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  promo_code_id INTEGER REFERENCES promo_codes(id) ON DELETE SET NULL,
+  commission_rate DECIMAL(5,2) DEFAULT 15.00,
+  commission_amount DECIMAL(10,2) DEFAULT 0.00,
+  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'cancelled')),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  paid_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_subscriptions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  tier VARCHAR(20) DEFAULT 'free' CHECK (tier IN ('free', 'premium', 'elite')),
+  promo_code_id INTEGER REFERENCES promo_codes(id) ON DELETE SET NULL,
+  starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  ends_at TIMESTAMP,
+  auto_renew BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add influencer flag to users table
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_influencer BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS influencer_tier VARCHAR(20) DEFAULT 'bronze';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS total_commission DECIMAL(10,2) DEFAULT 0.00;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code VARCHAR(50) UNIQUE;
+
+-- Insert default promo codes
+INSERT INTO promo_codes (code, description, discount_type, discount_value, max_uses) VALUES
+  ('WELCOME10', 'Welcome discount for new users', 'percentage', 10.00, 1000),
+  ('NBAGURU20', 'NBA Guru influencer special', 'percentage', 20.00, 500),
+  ('BALLISLIFE15', 'Ball is Life community code', 'percentage', 15.00, 300),
+  ('TRIAL7', '7-day premium trial', 'trial', 7.00, 1000),
+  ('ELITE50', '50% off Elite tier', 'percentage', 50.00, 100);
+```
+
+## Backend API Routes
+
+### Promo Code Routes
+- `POST /api/promo/validate` - Validate a promo code
+- `POST /api/promo/apply` - Apply promo code to user
+- `GET /api/promo/public` - List public promo codes
+- `POST /api/admin/promo` - Create promo code (admin)
+- `GET /api/admin/promo/stats` - Get promo code statistics
+
+### Influencer Routes
+- `POST /api/influencer/register` - Register as influencer
+- `GET /api/influencer/dashboard` - Get influencer dashboard
+- `GET /api/influencer/commissions` - Get commission history
+
+### Subscription Routes
+- `POST /api/subscription/upgrade` - Upgrade subscription tier
+- `GET /api/subscription/status` - Get user subscription status
+- `POST /api/subscription/cancel` - Cancel auto-renewal
+
+## Frontend Components
+
+### 1. PromoCodeInput Component
+```javascript
+// Components/PromoCodeInput.js
+import React, { useState } from 'react';
+import { View, TextInput, Button, Text } from 'react-native';
+
+export default function PromoCodeInput({ onApply }) {
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const handleApply = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/promo/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      // ... handle response
+    } catch (error) {
+      setMessage('Invalid or expired promo code');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <View>
+      <TextInput 
+        placeholder="Enter promo code"
+        value={code}
+        onChangeText={setCode}
+        style={styles.input}
+      />
+      <Button 
+        title="Apply" 
+        onPress={handleApply} 
+        disabled={loading}
+      />
+      {message ? <Text>{message}</Text> : null}
+    </View>
+  );
+}
+
+// Components/SubscriptionTiers.js
+export default function SubscriptionTiers({ onSelectTier }) {
+  const tiers = [
+    { id: 'free', name: 'Free', price: 0, features: ['Basic stats', 'Daily updates'] },
+    { id: 'premium', name: 'Premium', price: 9.99, features: ['Advanced analytics', 'Real-time alerts'] },
+    { id: 'elite', name: 'Elite', price: 19.99, features: ['All features', 'Priority support', 'Custom reports'] }
+  ];
+
+  return (
+    <View style={styles.container}>
+      {tiers.map(tier => (
+        <View key={tier.id} style={styles.tierCard}>
+          <Text style={styles.tierName}>{tier.name}</Text>
+          <Text style={styles.price}>${tier.price}/month</Text>
+          <Button title="Select" onPress={() => onSelectTier(tier)} />
+        </View>
+      ))}
+    </View>
+  );
+}
+// Screens/InfluencerDashboard.js
+export default function InfluencerDashboard() {
+  const [stats, setStats] = useState({
+    totalReferrals: 0,
+    totalCommission: 0,
+    pendingCommission: 0
+  });
+
+  // Fetch influencer stats
+  useEffect(() => {
+    fetchInfluencerStats();
+  }, []);
+
+  return (
+    <View>
+      <Text>Your Referral Code: ABC123</Text>
+      <Text>Total Referrals: {stats.totalReferrals}</Text>
+      <Text>Total Commission: ${stats.totalCommission}</Text>
+      <Text>Pending: ${stats.pendingCommission}</Text>
+    </View>
+  );
+}
+
+## Implementation Steps
+
+### Phase 1: Database Setup
+1. Run the SQL schema in your PostgreSQL database
+2. Update User model with new fields
+3. Create PromoCode, PromoUsage, InfluencerCommission models
+
+### Phase 2: Backend Implementation
+1. Create promo code validation service
+2. Implement promo code application logic
+3. Add influencer registration endpoints
+4. Create subscription management system
+
+### Phase 3: Frontend Integration
+1. Add PromoCodeInput component to checkout
+2. Create subscription upgrade flow
+3. Build influencer dashboard screen
+4. Add referral sharing functionality
+
+### Phase 4: Testing & Launch
+1. Test promo code validation
+2. Test influencer commission tracking
+3. Test subscription upgrades/downgrades
+4. Launch with initial promo codes
+
+## Environment Variables
+```bash
+# .env file additions
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+DEFAULT_COMMISSION_RATE=15
+

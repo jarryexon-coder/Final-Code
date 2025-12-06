@@ -1,0 +1,70 @@
+{
+  "name": "nba-fantasy-ai-backend",
+  "version": "4.1.0",
+  "description": "NBA Fantasy AI Backend API Server - Complete Consolidated Version",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "server": "node server.js",
+    "test": "node test-server.js",
+    "test:endpoints": "curl http://localhost:3000/api/nba/games/today && curl http://localhost:3000/api/nba/fantasy/advice",
+    "test:phase4": "node test-phase4.js",
+    "test:phase5": "node test-phase5.js",
+    "test:social": "node test-social.js",
+    "test:handlers": "node test-handlers.js",
+    "test:health": "node test-health.js",
+    "test:teams": "node test-teams.js",
+    "test:all": "npm run test:health && npm run test:phase4 && npm run test:phase5 && npm run test:social",
+    "test:critical": "curl -s http://localhost:3000/health && curl -s http://localhost:3000/api/nba/games/today | jq .",
+    "setup:env": "node setup-env.js",
+    "security:reset": "node security-reset.js",
+    "heroku:deploy": "git add . && git commit -m 'Deploy to Heroku' && git push heroku main",
+    "gae:deploy": "gcloud app deploy --quiet",
+    "postinstall": "echo '🏀 NBA Fantasy AI Backend v4.1 installed successfully!'"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "axios-rate-limit": "^1.4.0",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "expo-server-sdk": "^4.0.0",
+    "express": "^4.21.2",
+    "express-rate-limit": "^8.2.1",
+    "firebase-admin": "^13.6.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^7.0.0",
+    "mongoose": "^9.0.1",
+    "node-cache": "^5.1.2",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^2.7.0",
+    "nodemailer": "^7.0.11",
+    "pg": "^8.16.3",
+    "redis": "^4.7.1",
+    "socket.io": "^4.8.1",
+    "stripe": "^20.0.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11",
+    "supertest": "^7.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "nba",
+    "fantasy",
+    "ai",
+    "basketball",
+    "sports",
+    "api",
+    "mongodb",
+    "socket.io"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}

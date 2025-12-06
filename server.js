@@ -1,0 +1,234 @@
+const express = require('express');
+const cors = require('cors');
+require('dotenv').config();
+
+// Import controllers
+const nflController = require('./controllers/nflController');
+const nhlController = require('./controllers/nhlController');
+const analyticsController = require('./controllers/analyticsController');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+// CORS Configuration - Updated for development
+app.use(cors({
+  origin: ['http://localhost:8081', 'http://10.0.0.183:8081', 'exp://10.0.0.183:8081', 'http://localhost:19006', 'http://localhost:19000', 'http://localhost:3000', '*'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Request logging middleware (FIXED: removed extra closing parenthesis)
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} from ${req.ip}`);
+  next();
+});
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Simple health check
+app.get('/health', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'NBA Fantasy Backend is running',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'NBA Fantasy AI Assistant API',
+    endpoints: {
+      health: '/health',
+      nba: {
+        games: '/api/nba/games/today',
+        players: '/api/nba/players',
+        fantasy: '/api/nba/fantasy/advice',
+        betting: '/api/nba/betting/odds'
+      },
+      nfl: {
+        games: '/api/nfl/games',
+        stats: '/api/nfl/stats',
+        predictions: '/api/nfl/predictions',
+        odds: '/api/nfl/odds'
+      },
+      nhl: {
+        games: '/api/nhl/games',
+        stats: '/api/nhl/stats',
+        predictions: '/api/nhl/predictions',
+        odds: '/api/nhl/odds'
+      },
+      analytics: '/api/analytics',
+      promo: '/api/promo/public',
+      influencer: '/api/influencer/directory/public'
+    }
+  });
+});
+
+// Try to load NBA routes from routes directory
+try {
+  const nbaRouter = require('./routes/nba');
+  app.use('/api/nba', nbaRouter);
+  console.log('✅ NBA routes loaded from routes/nba.js');
+} catch (error) {
+  console.log('⚠️ Could not load NBA routes from file, using inline routes');
+  
+  // Inline NBA routes as fallback
+  app.get('/api/nba/games/today', (req, res) => {
+    res.json({
+      success: true,
+      data: [
+        {
+          id: 1,
+          home_team: 'Los Angeles Lakers',
+          away_team: 'Golden State Warriors',
+          time: '7:30 PM ET',
+          channel: 'TNT',
+          home_score: 112,
+          away_score: 108,
+          status: 'Final'
+        }
+      ]
+    });
+  });
+  
+  app.get('/api/nba/players', (req, res) => {
+    res.json({
+      success: true,
+      data: [
+        { id: 1, name: 'LeBron James', team: 'LAL', position: 'SF', points: 27.8, rebounds: 8.2, assists: 8.5 }
+      ]
+    });
+  });
+  
+  app.get('/api/nba/fantasy/advice', (req, res) => {
+    res.json({
+      success: true,
+      data: {
+        must_starts: [
+          { player: 'LeBron James', reason: 'High usage with Davis out', projection: '55+ fantasy points' }
+        ]
+      }
+    });
+  });
+  
+  app.get('/api/nba/betting/odds', (req, res) => {
+    res.json({
+      success: true,
+      data: {
+        games: [
+          {
+            home_team: 'Lakers',
+            away_team: 'Warriors',
+            moneyline: { home: -150, away: +130 }
+          }
+        ]
+      }
+    });
+  });
+}
+
+// --- NFL Routes ---
+app.get('/api/nfl/games', nflController.getGames);
+app.get('/api/nfl/stats', nflController.getStats);
+app.get('/api/nfl/predictions', nflController.getPredictions);
+app.get('/api/nfl/odds', nflController.getOdds);
+
+// --- NHL Routes ---
+app.get('/api/nhl/games', nhlController.getGames);
+app.get('/api/nhl/stats', nhlController.getStats);
+app.get('/api/nhl/predictions', nhlController.getPredictions);
+app.get('/api/nhl/odds', nhlController.getOdds);
+
+// --- Analytics Route ---
+app.get('/api/analytics', analyticsController.getAnalytics);
+
+// Promo system endpoint
+app.get('/api/promo/public', (req, res) => {
+  res.json({
+    success: true,
+    promos: [
+      {
+        id: 'WELCOME100',
+        name: 'Welcome Bonus',
+        description: 'Get $100 in free bets when you sign up!',
+        code: 'WELCOME100',
+        expiration: '2024-12-31'
+      }
+    ]
+  });
+});
+
+// Influencer directory endpoint
+app.get('/api/influencer/directory/public', (req, res) => {
+  res.json({
+    success: true,
+    influencers: [
+      {
+        id: 1,
+        name: 'NBA Analyst',
+        followers: '250K',
+        specialty: 'Fantasy Picks',
+        success_rate: '78%'
+      }
+    ]
+  });
+});
+
+// Influencer analytics endpoint
+app.get('/api/influencer/:id/analytics', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      id: req.params.id,
+      name: 'NBA Analyst',
+      followers_growth: '+5% this week',
+      engagement_rate: '4.2%',
+      top_performing_posts: [
+        { title: 'Lakers vs Warriors Prediction', engagement: '1.2K' }
+      ]
+    }
+  });
+});
+
+// Test endpoint for debugging
+app.get('/api/debug/test', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Debug endpoint working',
+    timestamp: new Date().toISOString(),
+    request: {
+      method: req.method,
+      url: req.url,
+      headers: req.headers
+    }
+  });
+});
+
+// Start server
+const server = app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+  console.log(`📡 Health check: http://localhost:${PORT}/health`);
+  console.log(`🏀 NBA endpoints: http://localhost:${PORT}/api/nba/games/today`);
+  console.log(`🏈 NFL endpoints: http://localhost:${PORT}/api/nfl/games`);
+  console.log(`🏒 NHL endpoints: http://localhost:${PORT}/api/nhl/games`);
+  console.log(`📊 Analytics endpoint: http://localhost:${PORT}/api/analytics`);
+  console.log(`🎁 Promo endpoint: http://localhost:${PORT}/api/promo/public`);
+  console.log(`👑 Influencer endpoint: http://localhost:${PORT}/api/influencer/directory/public`);
+});
+
+// Handle graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+});
+
+module.exports = app;

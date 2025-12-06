@@ -1,0 +1,16 @@
+🚀 Minimal backend running on port 3000
+   http://localhost:3000
+   http://127.0.0.1:3000
+   http://10.0.0.183:3000
+
+📡 Endpoints available:
+   GET  /health
+   GET  /api/nba/games/today
+   GET  /api/nba/players
+   GET  /api/nba/fantasy/advice
+   GET  /api/nba/betting/odds
+   GET  /api/promo/public
+   GET  /api/influencer/directory/public
+   GET  /api/influencer/:id/analytics
+2025-12-05T19:19:55.694Z GET /health
+2025-12-05T19:19:55.713Z GET /health
