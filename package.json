@@ -1,50 +1,58 @@
 {
   "name": "nba-fantasy-ai-backend",
   "version": "4.1.0",
-  "description": "NBA Fantasy AI Backend API Server - Complete Consolidated Version",
+  "description": "NBA Fantasy AI Backend API Server",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
     "server": "node server.js",
-    "test": "node test-server.js",
-    "test:endpoints": "curl http://localhost:3000/api/nba/games/today && curl http://localhost:3000/api/nba/fantasy/advice",
+    "test": "curl http://localhost:3000/health",
+    "test:endpoints": "curl http://localhost:3000/health && curl http://localhost:3000/api/players && curl http://localhost:3000/api/teams",
     "test:phase4": "node test-phase4.js",
     "test:phase5": "node test-phase5.js",
     "test:social": "node test-social.js",
     "test:handlers": "node test-handlers.js",
-    "test:health": "node test-health.js",
-    "test:teams": "node test-teams.js",
-    "test:all": "npm run test:health && npm run test:phase4 && npm run test:phase5 && npm run test:social",
-    "test:critical": "curl -s http://localhost:3000/health && curl -s http://localhost:3000/api/nba/games/today | jq .",
+    "test:health": "curl -s http://localhost:3000/health | jq .",
+    "test:teams": "curl -s http://localhost:3000/api/teams | jq .",
+    "test:all": "npm run test:health && npm run test:teams",
+    "test:critical": "curl -s http://localhost:3000/health && curl -s http://localhost:3000/api/players | jq .",
+    "test:revenuecat": "node test-revenuecat.js",
     "setup:env": "node setup-env.js",
     "security:reset": "node security-reset.js",
     "heroku:deploy": "git add . && git commit -m 'Deploy to Heroku' && git push heroku main",
     "gae:deploy": "gcloud app deploy --quiet",
-    "postinstall": "echo '🏀 NBA Fantasy AI Backend v4.1 installed successfully!'"
+    "postinstall": "echo '🏀 NBA Fantasy AI Backend v4.1 installed successfully!'",
+    "clean": "rm -rf node_modules package-lock.json",
+    "reinstall": "npm run clean && npm install",
+    "monitor": "curl -s http://localhost:3000/health | jq ."
   },
   "dependencies": {
+    "@revenuecat/purchases-js": "^1.20.0",
     "axios": "^1.13.2",
     "axios-rate-limit": "^1.4.0",
     "bcryptjs": "^2.4.3",
-    "body-parser": "^1.20.3",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "expo-server-sdk": "^4.0.0",
-    "express": "^4.21.2",
+    "express": "^4.22.1",
     "express-rate-limit": "^8.2.1",
     "firebase-admin": "^13.6.0",
-    "jsonwebtoken": "^9.0.2",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.2",
+    "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.0.0",
     "mongoose": "^9.0.1",
     "node-cache": "^5.1.2",
     "node-cron": "^3.0.3",
-    "node-fetch": "^2.7.0",
     "nodemailer": "^7.0.11",
     "pg": "^8.16.3",
     "redis": "^4.7.1",
     "socket.io": "^4.8.1",
     "stripe": "^20.0.0",
+    "web-push": "^3.6.7",
     "ws": "^8.18.3"
   },
   "devDependencies": {
@@ -52,8 +60,8 @@
     "supertest": "^7.1.4"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=8.0.0"
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   },
   "keywords": [
     "nba",
@@ -62,9 +70,19 @@
     "basketball",
     "sports",
     "api",
-    "mongodb",
-    "socket.io"
+    "express",
+    "socket.io",
+    "revenuecat",
+    "subscriptions"
   ],
   "author": "Your Name",
-  "license": "MIT"
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/nba-fantasy-ai-backend.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/nba-fantasy-ai-backend/issues"
+  },
+  "homepage": "https://github.com/yourusername/nba-fantasy-ai-backend#readme"
 }

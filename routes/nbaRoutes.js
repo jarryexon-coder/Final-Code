@@ -1,7 +1,8 @@
-const express = require('express');
+import express from 'express';
+import NBAService from '../services/nbaService.js';
+import Player from '../models/Player.js';
+
 const router = express.Router();
-const NBAService = require('../services/nbaService');
-const Player = require('../models/Player');
 
 // Get player stats
 router.get('/player/:name', async (req, res) => {
@@ -89,4 +90,4 @@ router.get('/db-status', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

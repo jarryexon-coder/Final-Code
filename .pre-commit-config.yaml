@@ -1,0 +1,5 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.24.2 # You can check for the latest version on their GitHub
+    hooks:
+      - id: gitleaks

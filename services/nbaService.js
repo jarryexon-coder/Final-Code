@@ -1,5 +1,5 @@
-const Player = require('../models/Player');
-const axios = require('axios');
+import Player from '../models/Player.js';
+import axios from 'axios';
 
 class NBAService {
   // Mock data for demonstration - replace with real NBA API
@@ -94,4 +94,4 @@ class NBAService {
   }
 }
 
-module.exports = NBAService;
+export default NBAService;

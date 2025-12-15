@@ -1,110 +1,347 @@
 // NBA Controller - Handles NBA-related API logic
+const redis = require('redis');
+const axios = require('axios');
+
+// Create Redis client (add config in production)
+const client = redis.createClient({
+  socket: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: process.env.REDIS_PORT || 6379
+  }
+});
+
+// Handle Redis errors
+client.on('error', (err) => console.log('Redis Client Error', err));
+
+// Connect to Redis
+(async () => {
+  try {
+    await client.connect();
+    console.log('✅ Connected to Redis cache');
+  } catch (err) {
+    console.error('❌ Failed to connect to Redis:', err);
+    console.log('⚠️  Continuing without cache...');
+  }
+})();
+
+// Helper function to format date as YYYY-MM-DD
+const formatDate = (date) => {
+  return date.toISOString().split('T')[0];
+};
+
+// Helper function to fetch real games data from API
+const fetchRealGamesData = async (date) => {
+  try {
+    const apiKey = process.env.SPORTSDATA_API_KEY;
+    
+    if (!apiKey) {
+      console.log('⚠️  No SportsData API key found, using mock data');
+      return null;
+    }
+    
+    const formattedDate = formatDate(date);
+    const response = await axios.get(
+      `https://api.sportsdata.io/v3/nba/scores/json/GamesByDate/${formattedDate}`,
+      { 
+        headers: { 
+          'Ocp-Apim-Subscription-Key': apiKey 
+        },
+        timeout: 5000 // 5 second timeout
+      }
+    );
+    
+    if (response.data && Array.isArray(response.data)) {
+      return response.data.map(game => ({
+        id: game.GameID,
+        home_team: game.HomeTeam,
+        away_team: game.AwayTeam,
+        time: game.DateTime ? new Date(game.DateTime).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit',
+          timeZone: 'America/New_York',
+          hour12: false 
+        }) + ' ET' : 'TBD',
+        home_score: game.HomeTeamScore || 0,
+        away_score: game.AwayTeamScore || 0,
+        status: game.Status || 'Scheduled',
+        channel: game.Channel || 'TBD',
+        date: formattedDate,
+        arena: game.Arena || null,
+        city: game.ArenaCity || null
+      }));
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ SportsData API Error:', error.message);
+    return null;
+  }
+};
+
+// Helper function for fallback mock data
+const getFallbackGames = (date) => {
+  const today = formatDate(date);
+  const yesterday = formatDate(new Date(date.getTime() - 86400000));
+  const tomorrow = formatDate(new Date(date.getTime() + 86400000));
+  
+  return [
+    {
+      id: 1,
+      home_team: 'Los Angeles Lakers',
+      away_team: 'Golden State Warriors',
+      time: '7:30 PM ET',
+      channel: 'TNT',
+      home_score: 112,
+      away_score: 108,
+      status: 'Final',
+      date: today
+    },
+    {
+      id: 2,
+      home_team: 'Boston Celtics',
+      away_team: 'Miami Heat',
+      time: '8:00 PM ET',
+      channel: 'ESPN',
+      home_score: 105,
+      away_score: 102,
+      status: 'Q3 4:32',
+      date: today
+    },
+    {
+      id: 3,
+      home_team: 'Denver Nuggets',
+      away_team: 'Phoenix Suns',
+      time: '10:00 PM ET',
+      channel: 'NBA TV',
+      home_score: 0,
+      away_score: 0,
+      status: 'Upcoming',
+      date: today
+    },
+    {
+      id: 4,
+      home_team: 'New York Knicks',
+      away_team: 'Brooklyn Nets',
+      time: '7:00 PM ET',
+      channel: 'MSG',
+      home_score: 98,
+      away_score: 95,
+      status: 'Final',
+      date: yesterday
+    },
+    {
+      id: 5,
+      home_team: 'Milwaukee Bucks',
+      away_team: 'Philadelphia 76ers',
+      time: '7:30 PM ET',
+      channel: 'NBA TV',
+      home_score: 0,
+      away_score: 0,
+      status: 'Scheduled',
+      date: tomorrow
+    }
+  ];
+};
+
 const nbaController = {
   // ===== GET ALL NBA GAMES =====
-  getGames: (req, res) => {
-    console.log('[NBA Controller] Getting all games');
-    
-    const games = [
-      {
-        id: 1,
-        home_team: 'Los Angeles Lakers',
-        away_team: 'Golden State Warriors',
-        time: '7:30 PM ET',
-        channel: 'TNT',
-        home_score: 112,
-        away_score: 108,
-        status: 'Final',
-        date: new Date().toISOString().split('T')[0]
-      },
-      {
-        id: 2,
-        home_team: 'Boston Celtics',
-        away_team: 'Miami Heat',
-        time: '8:00 PM ET',
-        channel: 'ESPN',
-        home_score: 105,
-        away_score: 102,
-        status: 'Q3 4:32',
-        date: new Date().toISOString().split('T')[0]
-      },
-      {
-        id: 3,
-        home_team: 'Denver Nuggets',
-        away_team: 'Phoenix Suns',
-        time: '10:00 PM ET',
-        channel: 'NBA TV',
-        home_score: 0,
-        away_score: 0,
-        status: 'Upcoming',
-        date: new Date().toISOString().split('T')[0]
-      },
-      {
-        id: 4,
-        home_team: 'New York Knicks',
-        away_team: 'Brooklyn Nets',
-        time: '7:00 PM ET',
-        channel: 'MSG',
-        home_score: 98,
-        away_score: 95,
-        status: 'Final',
-        date: new Date(Date.now() - 86400000).toISOString().split('T')[0] // Yesterday
+  getGames: async (req, res) => {
+    try {
+      console.log('[NBA Controller] Getting all games (real data)');
+      
+      // Try to get games for today, yesterday, and tomorrow
+      const today = new Date();
+      const yesterday = new Date(today.getTime() - 86400000);
+      const tomorrow = new Date(today.getTime() + 86400000);
+      
+      const [gamesToday, gamesYesterday, gamesTomorrow] = await Promise.all([
+        fetchRealGamesData(today),
+        fetchRealGamesData(yesterday),
+        fetchRealGamesData(tomorrow)
+      ]);
+      
+      let allGames = [];
+      
+      // Combine real data if available
+      if (gamesToday && gamesYesterday && gamesTomorrow) {
+        allGames = [...gamesYesterday, ...gamesToday, ...gamesTomorrow];
+      } else {
+        // Fallback to mock data
+        console.log('📋 Using fallback mock data for getGames');
+        allGames = getFallbackGames(today);
       }
-    ];
-    
-    res.json({
-      success: true,
-      data: games,
-      count: games.length,
-      timestamp: new Date().toISOString()
-    });
+      
+      // Filter based on query parameters if provided
+      let filteredGames = allGames;
+      
+      if (req.query.date) {
+        filteredGames = filteredGames.filter(game => game.date === req.query.date);
+      }
+      
+      if (req.query.status) {
+        filteredGames = filteredGames.filter(game => 
+          game.status.toLowerCase().includes(req.query.status.toLowerCase())
+        );
+      }
+      
+      if (req.query.team) {
+        const teamQuery = req.query.team.toLowerCase();
+        filteredGames = filteredGames.filter(game => 
+          game.home_team.toLowerCase().includes(teamQuery) ||
+          game.away_team.toLowerCase().includes(teamQuery)
+        );
+      }
+      
+      res.json({
+        success: true,
+        data: filteredGames,
+        count: filteredGames.length,
+        timestamp: new Date().toISOString(),
+        source: allGames[0] && allGames[0].arena ? 'SportsData API' : 'Mock Data'
+      });
+      
+    } catch (error) {
+      console.error('[NBA Controller] Error in getGames:', error);
+      
+      // Fallback to mock data
+      const games = getFallbackGames(new Date());
+      res.json({
+        success: true,
+        data: games,
+        count: games.length,
+        timestamp: new Date().toISOString(),
+        source: 'Mock Data (Fallback)',
+        error: error.message
+      });
+    }
   },
 
-  // ===== GET TODAY'S NBA GAMES =====
-  getTodayGames: (req, res) => {
-    console.log('[NBA Controller] Getting today\'s games');
-    
-    const today = new Date().toISOString().split('T')[0];
-    const games = [
-      {
-        id: 1,
-        home_team: 'Los Angeles Lakers',
-        away_team: 'Golden State Warriors',
-        time: '7:30 PM ET',
-        channel: 'TNT',
-        home_score: 112,
-        away_score: 108,
-        status: 'Final',
-        date: today
-      },
-      {
-        id: 2,
-        home_team: 'Boston Celtics',
-        away_team: 'Miami Heat',
-        time: '8:00 PM ET',
-        channel: 'ESPN',
-        home_score: 105,
-        away_score: 102,
-        status: 'Q3 4:32',
-        date: today
-      },
-      {
-        id: 3,
-        home_team: 'Denver Nuggets',
-        away_team: 'Phoenix Suns',
-        time: '10:00 PM ET',
-        channel: 'NBA TV',
-        home_score: 0,
-        away_score: 0,
-        status: 'Upcoming',
-        date: today
+  // ===== GET TODAY'S NBA GAMES (WITH CACHING) =====
+  getTodayGames: async (req, res) => {
+    try {
+      const today = new Date();
+      const todayStr = formatDate(today);
+      const cacheKey = `nba-games-${todayStr}`;
+      
+      // Try cache first
+      const cachedResponse = await client.get(cacheKey);
+      if (cachedResponse) {
+        console.log('📦 [NBA Controller] Serving today\'s games from Redis cache');
+        return res.json(JSON.parse(cachedResponse));
       }
-    ];
-    
-    res.json({
-      success: true,
-      data: games,
-      timestamp: new Date().toISOString()
-    });
+      
+      // If not cached, try to fetch real data
+      console.log('🔄 [NBA Controller] Fetching fresh NBA games data');
+      
+      let games = await fetchRealGamesData(today);
+      let source = 'SportsData API';
+      
+      // Fallback to mock data if real API fails
+      if (!games || games.length === 0) {
+        console.log('📋 Using fallback mock data for today\'s games');
+        games = getFallbackGames(today).filter(game => game.date === todayStr);
+        source = 'Mock Data';
+      }
+      
+      const responseData = {
+        success: true,
+        data: games,
+        timestamp: new Date().toISOString(),
+        cached: false,
+        source: source,
+        date: todayStr
+      };
+      
+      // Store in Redis for 5 minutes (300 seconds)
+      try {
+        await client.setEx(cacheKey, 300, JSON.stringify(responseData));
+      } catch (cacheError) {
+        console.error('⚠️ Redis cache error:', cacheError.message);
+      }
+      
+      res.json(responseData);
+      
+    } catch (error) {
+      console.error('[NBA Controller] Error in getTodayGames:', error);
+      
+      // Fallback: Serve mock data without cache
+      const today = new Date();
+      const todayStr = formatDate(today);
+      const games = getFallbackGames(today).filter(game => game.date === todayStr);
+      
+      res.json({
+        success: true,
+        data: games,
+        timestamp: new Date().toISOString(),
+        cached: false,
+        source: 'Mock Data (Error Fallback)',
+        error: error.message
+      });
+    }
+  },
+
+  // ===== GET GAMES BY DATE =====
+  getGamesByDate: async (req, res) => {
+    try {
+      const { date } = req.params;
+      
+      if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid date format. Use YYYY-MM-DD'
+        });
+      }
+      
+      console.log(`[NBA Controller] Getting games for date: ${date}`);
+      
+      const gameDate = new Date(date);
+      const cacheKey = `nba-games-${date}`;
+      
+      // Try cache first
+      const cachedResponse = await client.get(cacheKey);
+      if (cachedResponse) {
+        console.log(`📦 Serving games for ${date} from Redis cache`);
+        return res.json(JSON.parse(cachedResponse));
+      }
+      
+      // Fetch fresh data
+      let games = await fetchRealGamesData(gameDate);
+      let source = 'SportsData API';
+      
+      // Fallback to mock data if real API fails
+      if (!games || games.length === 0) {
+        console.log(`📋 Using fallback mock data for ${date}`);
+        games = getFallbackGames(gameDate).filter(game => game.date === date);
+        source = 'Mock Data';
+      }
+      
+      const responseData = {
+        success: true,
+        data: games,
+        date: date,
+        timestamp: new Date().toISOString(),
+        cached: false,
+        source: source
+      };
+      
+      // Store in Redis for 5 minutes
+      try {
+        await client.setEx(cacheKey, 300, JSON.stringify(responseData));
+      } catch (cacheError) {
+        console.error('⚠️ Redis cache error:', cacheError.message);
+      }
+      
+      res.json(responseData);
+      
+    } catch (error) {
+      console.error('[NBA Controller] Error in getGamesByDate:', error);
+      
+      res.status(500).json({
+        success: false,
+        error: 'Failed to fetch games for the specified date',
+        message: error.message
+      });
+    }
   },
 
   // ===== GET NBA PLAYERS =====
@@ -308,6 +545,52 @@ const nbaController = {
       success: true,
       data: player
     });
+  },
+
+  // ===== GET API STATUS =====
+  getApiStatus: async (req, res) => {
+    try {
+      const apiKey = process.env.SPORTSDATA_API_KEY;
+      const today = new Date();
+      const todayStr = formatDate(today);
+      
+      // Test the API
+      let apiWorking = false;
+      let message = 'API not configured';
+      
+      if (apiKey) {
+        try {
+          const response = await axios.get(
+            `https://api.sportsdata.io/v3/nba/scores/json/GamesByDate/${todayStr}`,
+            { 
+              headers: { 
+                'Ocp-Apim-Subscription-Key': apiKey 
+              },
+              timeout: 3000
+            }
+          );
+          
+          apiWorking = response.status === 200;
+          message = apiWorking ? 'API is working' : `API returned status ${response.status}`;
+        } catch (apiError) {
+          message = `API error: ${apiError.message}`;
+        }
+      }
+      
+      res.json({
+        success: true,
+        api_configured: !!apiKey,
+        api_working: apiWorking,
+        message: message,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      res.json({
+        success: false,
+        error: error.message
+      });
+    }
   }
 };
 
