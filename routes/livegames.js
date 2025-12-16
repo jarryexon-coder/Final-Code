@@ -1,39 +1,44 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
-// Get current live games
-router.get('/live', (req, res) => {
-  // This would connect to a real NBA API
-  const liveGames = [
-    {
-      id: 1,
-      home_team: "Lakers",
-      away_team: "Warriors",
-      home_score: 98,
-      away_score: 95,
-      period: "4th",
-      time_remaining: "2:15",
-      status: "in_progress",
-      broadcast: "ESPN"
-    },
-    {
-      id: 2,
-      home_team: "Celtics", 
-      away_team: "Heat",
-      home_score: 85,
-      away_score: 82,
-      period: "3rd",
-      time_remaining: "1:20",
-      status: "in_progress",
-      broadcast: "TNT"
-    }
-  ];
-
+// Live games endpoint
+router.get('/live', async (req, res) => {
+  console.log('🎮 /api/games/live endpoint called');
+  
+  const liveGames = {
+    nba: [
+      {
+        gameId: 'nba-live-001',
+        status: 'live',
+        clock: '2:15',
+        period: '4th Qtr',
+        homeTeam: { abbreviation: 'LAL', name: 'Lakers', score: 98 },
+        awayTeam: { abbreviation: 'GSW', name: 'Warriors', score: 102 }
+      }
+    ],
+    nhl: [
+      {
+        gameId: 'nhl-live-001',
+        status: 'live',
+        clock: '10:45',
+        period: '3rd',
+        homeTeam: { abbreviation: 'BOS', name: 'Bruins', score: 3 },
+        awayTeam: { abbreviation: 'TOR', name: 'Maple Leafs', score: 2 }
+      }
+    ],
+    nfl: [],
+    updated: new Date().toISOString(),
+    totalLiveGames: 2
+  };
+  
   res.json({
     success: true,
     data: liveGames,
-    last_updated: new Date().toISOString()
+    count: liveGames.totalLiveGames,
+    timestamp: new Date().toISOString()
   });
 });
 
-module.exports = router;
+// Make sure this is at the END of the file
+export default router;
+export default router;
