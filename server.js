@@ -325,6 +325,9 @@ app.get('/api', (req, res) => {
 // Mount routes as specified in File 1
 app.use('/api/games', liveGamesRoutes); // From File 1 requirement
 
+// 🚨 CRITICAL FIX: Add the missing nhlRoutes mounting
+app.use('/api/nhl', nhlRoutes); // This line was missing!
+
 // Register all other route modules
 app.use('/api/nba', nbaRoutes);
 app.use('/api/nfl', nflRoutes);
