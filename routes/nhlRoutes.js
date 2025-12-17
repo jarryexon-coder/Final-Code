@@ -1,6 +1,5 @@
 // routes/nhlRoutes.js - COMPLETE VERSION
 import express from 'express';
-import { cacheService } from '../server.js';
 
 const router = express.Router();
 
@@ -361,24 +360,6 @@ router.get('/players', async (req, res) => {
         plusMinus: 31,
         penaltyMinutes: 20,
         timeOnIce: '20:55'
-      },
-      {
-        id: 5,
-        name: 'Cale Makar',
-        team: 'Colorado Avalanche',
-        position: 'D',
-        number: 8,
-        age: 25,
-        height: '5\'11"',
-        weight: 187,
-        nationality: 'CAN',
-        gamesPlayed: 62,
-        goals: 19,
-        assists: 52,
-        points: 71,
-        plusMinus: 22,
-        penaltyMinutes: 34,
-        timeOnIce: '25:10'
       }
     ];
     
@@ -394,87 +375,5 @@ router.get('/players', async (req, res) => {
   }
 });
 
-// NHL Team info endpoint
-router.get('/teams', async (req, res) => {
-  try {
-    console.log('🏒 /api/nhl/teams called');
-    
-    const teams = [
-      {
-        id: 1,
-        abbreviation: 'TOR',
-        name: 'Toronto Maple Leafs',
-        city: 'Toronto',
-        division: 'Atlantic',
-        conference: 'Eastern',
-        arena: 'Scotiabank Arena',
-        established: 1917,
-        colors: ['#003E7E', '#FFFFFF'],
-        website: 'https://www.nhl.com/mapleleafs'
-      },
-      {
-        id: 2,
-        abbreviation: 'MTL',
-        name: 'Montreal Canadiens',
-        city: 'Montreal',
-        division: 'Atlantic',
-        conference: 'Eastern',
-        arena: 'Bell Centre',
-        established: 1909,
-        colors: ['#AF1E2D', '#192168'],
-        website: 'https://www.nhl.com/canadiens'
-      },
-      {
-        id: 3,
-        abbreviation: 'BOS',
-        name: 'Boston Bruins',
-        city: 'Boston',
-        division: 'Atlantic',
-        conference: 'Eastern',
-        arena: 'TD Garden',
-        established: 1924,
-        colors: ['#FFB81C', '#000000'],
-        website: 'https://www.nhl.com/bruins'
-      },
-      {
-        id: 4,
-        abbreviation: 'VAN',
-        name: 'Vancouver Canucks',
-        city: 'Vancouver',
-        division: 'Pacific',
-        conference: 'Western',
-        arena: 'Rogers Arena',
-        established: 1970,
-        colors: ['#008852', '#041E42'],
-        website: 'https://www.nhl.com/canucks'
-      }
-    ];
-    
-    res.json({
-      success: true,
-      teams,
-      count: teams.length,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error in /api/nhl/teams:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// Health check endpoint
-router.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    service: 'NHL API',
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    endpoints: ['/games', '/standings', '/stats', '/players', '/teams']
-  });
-});
-
-// Export the router - THIS IS CRITICAL!
+// Export the router
 export default router;
-
-// Also export as named export for compatibility
-export { router };
