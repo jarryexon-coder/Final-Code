@@ -55,6 +55,41 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
+// ====================
+// ADDED FROM FILE 1: Enhanced CSP Configuration
+// ====================
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"], // By default, only allow from our own origin
+      scriptSrc: ["'self'"],  // Only allow scripts from our own origin
+      styleSrc: ["'self'", "'unsafe-inline'"], // Allow styles from self AND inline styles (common for React)
+      imgSrc: ["'self'", "data:", "https:"], // Allow images from self, data URIs, and any HTTPS source
+      connectSrc: ["'self'", "https://pleasing-determination-production.up.railway.app"], // Allow API connections to self and your backend
+      // Add other directives as needed: fontSrc, frameSrc, etc.
+    },
+  })
+);
+
+// ====================
+// ADDED FROM FILE 2: Permissions Policy Headers
+// ====================
+// Option 1: Using Helmet's permittedCrossDomainPolicies
+app.use(
+  helmet.permittedCrossDomainPolicies({
+    permittedPolicies: "none", // A very restrictive policy
+  })
+);
+
+// Option 2: Custom Permissions-Policy header with more features
+app.use((req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), accelerometer=(), gyroscope=(), magnetometer=(), usb=()"
+  );
+  next();
+});
+
 // 2. Add logging middleware (From File 1)
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
@@ -755,6 +790,9 @@ const initializeServer = async () => {
     // Security Status Report
     console.log('\n🔒 SECURITY FEATURES:');
     console.log('   ✅ Helmet Security Headers');
+    console.log('   ✅ Enhanced CSP Configuration (From File 1)');
+    console.log('   ✅ Permissions-Policy Headers (From File 2)');
+    console.log('   ✅ Cross-Domain Policies: Restricted');
     console.log('   ✅ CORS Configuration');
     console.log('   ✅ Rate Limiting: ' + (process.env.NODE_ENV === 'production' ? '100 req/15min' : '500 req/15min'));
     console.log('   ✅ Morgan Logging');
