@@ -1,25 +1,32 @@
-// middleware/auth.js
-const jwt = require('jsonwebtoken');
+// middleware/auth.js - JWT Authentication
+import jwt from 'jsonwebtoken';
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Authentication Middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+export const authenticateToken = (req, res, next) => {
+  // Public endpoints that don't need auth
+  const publicEndpoints = [
+    '/health',
+    '/api/sports-analytics/arbitrage',
+    '/api/situational/spot-plays'
+  ];
   
-  // For development/testing, allow bypass
-  if (process.env.NODE_ENV === 'development' && req.headers['x-bypass-auth'] === 'true') {
-    req.user = { id: 'dev_user', email: 'dev@example.com', role: 'admin' };
+  if (publicEndpoints.some(endpoint => req.path.startsWith(endpoint))) {
     return next();
   }
+  
+  // For premium/secret endpoints
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
   
   if (!token) {
     return res.status(401).json({ 
       success: false, 
-      error: 'Access token required' 
+      error: 'Authentication token required' 
     });
   }
   
-  jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key', (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
       return res.status(403).json({ 
         success: false, 
@@ -31,16 +38,9 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-const requireRole = (roles) => {
-  return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        success: false, 
-        error: 'Insufficient permissions' 
-      });
-    }
-    next();
-  };
+// Rate limiting by user
+export const userRateLimit = (req, res, next) => {
+  const userId = req.user?.id || req.ip;
+  // Implement Redis-based rate limiting
+  next();
 };
-
-module.exports = { authenticateToken, requireRole };

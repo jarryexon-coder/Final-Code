@@ -1,0 +1,31 @@
+2026-01-11 07:55:56: ❌ HTTP Server error: Error: listen EADDRINUSE: address already in use 0.0.0.0:3002
+2026-01-11 07:55:56:     at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+2026-01-11 07:55:56:     at listenInCluster (node:net:1997:12)
+2026-01-11 07:55:56:     at node:net:2206:7
+2026-01-11 07:55:56:     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+2026-01-11 07:55:56:   code: 'EADDRINUSE',
+2026-01-11 07:55:56:   errno: -48,
+2026-01-11 07:55:56:   syscall: 'listen',
+2026-01-11 07:55:56:   address: '0.0.0.0',
+2026-01-11 07:55:56:   port: 3002
+2026-01-11 07:55:56: }
+2026-01-11 07:57:52: MongooseError: Connection.prototype.close() no longer accepts a callback
+2026-01-11 07:57:52:     at NativeConnection.close (/Users/jerryexon/sports-app-production/nba-backend/node_modules/mongoose/lib/connection.js:1209:11)
+2026-01-11 07:57:52:     at file:///Users/jerryexon/sports-app-production/nba-backend/server.js:845:27
+2026-01-11 07:57:52:     at Server.close (node:net:2359:9)
+2026-01-11 07:57:52:     at Object.onceWrapper (node:events:622:28)
+2026-01-11 07:57:52:     at Server.emit (node:events:520:35)
+2026-01-11 07:57:52:     at Server.<anonymous> (/Users/jerryexon/.nvm/versions/node/v20.19.6/lib/node_modules/pm2/node_modules/@pm2/io/build/main/metrics/httpMetrics.js:153:37)
+2026-01-11 07:57:52:     at emitCloseNT (node:net:2419:8)
+2026-01-11 07:57:52:     at process.processTicksAndRejections (node:internal/process/task_queues:88:21)
+2026-01-11 07:57:55: ❌ HTTP Server error: Error: listen EADDRINUSE: address already in use 0.0.0.0:3002
+2026-01-11 07:57:55:     at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+2026-01-11 07:57:55:     at listenInCluster (node:net:1997:12)
+2026-01-11 07:57:55:     at node:net:2206:7
+2026-01-11 07:57:55:     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+2026-01-11 07:57:55:   code: 'EADDRINUSE',
+2026-01-11 07:57:55:   errno: -48,
+2026-01-11 07:57:55:   syscall: 'listen',
+2026-01-11 07:57:55:   address: '0.0.0.0',
+2026-01-11 07:57:55:   port: 3002
+2026-01-11 07:57:55: }

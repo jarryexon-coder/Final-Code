@@ -1,0 +1,13 @@
+--- server.js
++++ server.js
+@@ -68,6 +68,10 @@
+   }
+ };
+ 
++// ====================
++// BODY PARSER MIDDLEWARE (CRITICAL!)
++// ====================
++app.use(express.json());
+ 
+ // ====================
+ // SECURITY MIDDLEWARE

@@ -1,0 +1,35 @@
+2026-01-11 07:55:55: ✅ RevenueCat REST API Service Initialized
+2026-01-11 07:55:55: 🎮 Live games routes loaded
+2026-01-11 07:55:55: ✅ Body parsers initialized
+2026-01-11 07:55:55: 🔗 Connecting to MongoDB...
+2026-01-11 07:55:56: ✅ MongoDB connected successfully
+2026-01-11 07:55:56: ✅ Database service initialized
+2026-01-11 07:55:56: ✅ Connected to Redis cache
+2026-01-11 07:55:56: 🚀 Initializing NBA Fantasy AI Backend...
+2026-01-11 07:55:56: 🔄 Connecting to MongoDB Atlas...
+2026-01-11 07:55:56: 📝 Using URI (masked): mongodb+srv://Jerryexon1:****@cluster0.6sqqrz.mongodb.net/sports-app?appName=Cluster0
+2026-01-11 07:55:56: ✅ Connected to MongoDB Atlas
+2026-01-11 07:55:56: ✅ WebSocket server initialized
+2026-01-11 07:55:56: Port 3002 is already in use.
+2026-01-11 07:57:52: 
+2026-01-11 07:57:52: SIGINT received. Shutting down gracefully...
+2026-01-11 07:57:52: HTTP server closed
+2026-01-11 07:57:52: Redis connection closed
+2026-01-11 07:57:54: ✅ RevenueCat REST API Service Initialized
+2026-01-11 07:57:54: 🎮 Live games routes loaded
+2026-01-11 07:57:54: ✅ Body parsers initialized
+2026-01-11 07:57:54: 🔗 Connecting to MongoDB...
+2026-01-11 07:57:55: ✅ MongoDB connected successfully
+2026-01-11 07:57:55: ✅ Database service initialized
+2026-01-11 07:57:55: ✅ Connected to Redis cache
+2026-01-11 07:57:55: 🚀 Initializing NBA Fantasy AI Backend...
+2026-01-11 07:57:55: 🔄 Connecting to MongoDB Atlas...
+2026-01-11 07:57:55: 📝 Using URI (masked): mongodb+srv://Jerryexon1:****@cluster0.6sqqrz.mongodb.net/sports-app?appName=Cluster0
+2026-01-11 07:57:55: ✅ Connected to MongoDB Atlas
+2026-01-11 07:57:55: ✅ WebSocket server initialized
+2026-01-11 07:57:55: Port 3002 is already in use.
+2026-01-11 08:17:12: ⚠️ MongoDB disconnected
+2026-01-11 08:17:12: ⚠️  MongoDB disconnected
+2026-01-11 08:17:12: ✅ MongoDB connection established
+2026-01-11 08:17:12: ✅ MongoDB reconnected
+2026-01-11 08:18:16: ✅ MongoDB reconnected

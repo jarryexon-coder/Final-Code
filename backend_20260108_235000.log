@@ -1,0 +1,23 @@
+✅ RevenueCat REST API Service Initialized
+🎮 Live games routes loaded
+✅ Body parsers initialized
+✅ Connected to Redis cache
+🚀 Initializing NBA Fantasy AI Backend...
+🔄 Connecting to MongoDB Atlas...
+📝 Using URI (masked): mongodb+srv://Jerryexon1:****@cluster0.6sqqrz.mongodb.net/sports-app?appName=Cluster0
+✅ MongoDB connection established
+✅ Connected to MongoDB Atlas
+✅ WebSocket server initialized
+
+============================================================
+🎉 NBA Fantasy AI Backend Server Started Successfully!
+============================================================
+🌐 Local: http://localhost:3002
+📊 Health Check: http://localhost:3002/health
+📡 API Documentation: http://localhost:3002/api
+🔌 WebSocket Server: ws://localhost:3002
+⚡ Environment: development
+🕐 Started at: 2026-01-09T04:50:01.156Z
+============================================================
+
+[0mGET /health [32m200[0m 39.068 ms - 425[0m
