@@ -1,0 +1,63 @@
+✅ RevenueCat REST API Service Initialized
+🎮 Live games routes loaded
+✅ Body parsers initialized
+✅ Connected to Redis cache
+🚀 Initializing NBA Fantasy AI Backend...
+🔄 Connecting to MongoDB Atlas...
+📝 Using URI (masked): mongodb+srv://Jerryexon1:****@cluster0.6sqqrz.mongodb.net/sports-app?appName=Cluster0
+✅ MongoDB connection established
+✅ Connected to MongoDB Atlas
+✅ WebSocket server initialized
+
+============================================================
+🎉 NBA Fantasy AI Backend Server Started Successfully!
+============================================================
+🌐 Local: http://localhost:3002
+📊 Health Check: http://localhost:3002/health
+📡 API Documentation: http://localhost:3002/api
+🔌 WebSocket Server: ws://localhost:3002
+⚡ Environment: development
+🕐 Started at: 2026-01-09T04:56:30.774Z
+============================================================
+
+[0mGET /health [32m200[0m 124.383 ms - 425[0m
+🔵 [DEBUG] Secret phrase route accessed: POST /log-event
+🔵 [DEBUG] Request body type: object
+🔵 [DEBUG] Request body: {"userId":"FINAL_VERIFICATION_1767934602","phraseKey":"finaltest","phraseCategory":"verification","eventType":"discovery","inputText":"Final verification test","sport":"NBA"}
+🔵 [DEBUG] Request headers: {"host":"localhost:3002","user-agent":"curl/8.7.1","accept":"*/*","content-type":"application/json","content-length":"213"}
+🔵 [SECRET_PHRASE] POST /log-event received
+🔵 [SECRET_PHRASE] Full req.body: {
+  userId: 'FINAL_VERIFICATION_1767934602',
+  phraseKey: 'finaltest',
+  phraseCategory: 'verification',
+  eventType: 'discovery',
+  inputText: 'Final verification test',
+  sport: 'NBA'
+}
+🔵 [SECRET_PHRASE] Processing for user: FINAL_VERIFICATION_1767934602
+💾 [SECRET_PHRASE] Event created: 69608a8a6c09d3331d6a2cc6
+✅ Saved to analyticsevents: new ObjectId('69608a8a6c09d3331d6a2cc6')
+✅ Saved to secretphraseanalytics: new ObjectId('69608a8a6c09d3331d6a2cc6')
+📊 Verification: Document ✅ exists in database
+[0mPOST /api/secret-phrases/log-event [32m201[0m 196.671 ms - 179[0m
+[0mGET /health [32m200[0m 39.486 ms - 427[0m
+[0mGET /health [32m200[0m 27.323 ms - 427[0m
+🔵 [DEBUG] Secret phrase route accessed: POST /log-event
+🔵 [DEBUG] Request body type: object
+🔵 [DEBUG] Request body: {"userId":"CLI_TEST_1767934844","phraseKey":"26arbitrage","phraseCategory":"cli_test","eventType":"discovery","inputText":"Test from command line","sport":"NBA"}
+🔵 [DEBUG] Request headers: {"host":"localhost:3002","user-agent":"curl/8.7.1","accept":"*/*","content-type":"application/json","content-length":"256"}
+🔵 [SECRET_PHRASE] POST /log-event received
+🔵 [SECRET_PHRASE] Full req.body: {
+  userId: 'CLI_TEST_1767934844',
+  phraseKey: '26arbitrage',
+  phraseCategory: 'cli_test',
+  eventType: 'discovery',
+  inputText: 'Test from command line',
+  sport: 'NBA'
+}
+🔵 [SECRET_PHRASE] Processing for user: CLI_TEST_1767934844
+💾 [SECRET_PHRASE] Event created: 69608b7c6c09d3331d6a2cc7
+✅ Saved to analyticsevents: new ObjectId('69608b7c6c09d3331d6a2cc7')
+✅ Saved to secretphraseanalytics: new ObjectId('69608b7c6c09d3331d6a2cc7')
+📊 Verification: Document ✅ exists in database
+[0mPOST /api/secret-phrases/log-event [32m201[0m 111.890 ms - 169[0m

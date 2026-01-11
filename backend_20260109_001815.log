@@ -1,0 +1,109 @@
+✅ RevenueCat REST API Service Initialized
+🎮 Live games routes loaded
+✅ Body parsers initialized
+✅ Connected to Redis cache
+🚀 Initializing NBA Fantasy AI Backend...
+🔄 Connecting to MongoDB Atlas...
+📝 Using URI (masked): mongodb+srv://Jerryexon1:****@cluster0.6sqqrz.mongodb.net/sports-app?appName=Cluster0
+✅ MongoDB connection established
+✅ Connected to MongoDB Atlas
+✅ WebSocket server initialized
+
+============================================================
+🎉 NBA Fantasy AI Backend Server Started Successfully!
+============================================================
+🌐 Local: http://localhost:3002
+📊 Health Check: http://localhost:3002/health
+📡 API Documentation: http://localhost:3002/api
+🔌 WebSocket Server: ws://localhost:3002
+⚡ Environment: development
+🕐 Started at: 2026-01-09T05:18:16.890Z
+============================================================
+
+[0mGET /health [32m200[0m 99.964 ms - 425[0m
+[0mGET /health [32m200[0m 212.438 ms - 426[0m
+🔵 [DEBUG] Secret phrase route accessed: POST /log-event
+🔵 [DEBUG] Request body type: object
+🔵 [DEBUG] Request body: {"userId":"FRONTEND_TEST_1767935918662","phraseKey":"26arbitrage","phraseCategory":"frontend_test","eventType":"discovery","inputText":"Testing from frontend API","sport":"NBA"}
+🔵 [DEBUG] Request headers: {"host":"localhost:3002","connection":"keep-alive","content-type":"application/json","accept":"*/*","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"177"}
+🔵 [SECRET_PHRASE] POST /log-event received
+🔵 [SECRET_PHRASE] Full req.body: {
+  userId: 'FRONTEND_TEST_1767935918662',
+  phraseKey: '26arbitrage',
+  phraseCategory: 'frontend_test',
+  eventType: 'discovery',
+  inputText: 'Testing from frontend API',
+  sport: 'NBA'
+}
+🔵 [SECRET_PHRASE] Processing for user: FRONTEND_TEST_1767935918662
+💾 [SECRET_PHRASE] Event created: 69608faeced627fd8591bade
+✅ Saved to analyticsevents: new ObjectId('69608faeced627fd8591bade')
+✅ Saved to secretphraseanalytics: new ObjectId('69608faeced627fd8591bade')
+📊 Verification: Document ✅ exists in database
+[0mPOST /api/secret-phrases/log-event [32m201[0m 114.093 ms - 177[0m
+[0mGET /health [32m200[0m 122.775 ms - 426[0m
+[0mGET /health [32m200[0m 77.916 ms - 427[0m
+🔵 [DEBUG] Secret phrase route accessed: POST /log-event
+🔵 [DEBUG] Request body type: object
+🔵 [DEBUG] Request body: {"userId":"TEST_FRONTEND_1767936560736","phraseKey":"26arbitrage","phraseCategory":"frontend_integration","eventType":"discovery","inputText":"Testing from frontend integration script","sport":"NBA"}
+🔵 [DEBUG] Request headers: {"host":"localhost:3002","connection":"keep-alive","content-type":"application/json","accept":"application/json","accept-language":"*","sec-fetch-mode":"cors","user-agent":"node","accept-encoding":"gzip, deflate","content-length":"199"}
+🔵 [SECRET_PHRASE] POST /log-event received
+🔵 [SECRET_PHRASE] Full req.body: {
+  userId: 'TEST_FRONTEND_1767936560736',
+  phraseKey: '26arbitrage',
+  phraseCategory: 'frontend_integration',
+  eventType: 'discovery',
+  inputText: 'Testing from frontend integration script',
+  sport: 'NBA'
+}
+🔵 [SECRET_PHRASE] Processing for user: TEST_FRONTEND_1767936560736
+💾 [SECRET_PHRASE] Event created: 69609230ced627fd8591badf
+✅ Saved to analyticsevents: new ObjectId('69609230ced627fd8591badf')
+✅ Saved to secretphraseanalytics: new ObjectId('69609230ced627fd8591badf')
+📊 Verification: Document ✅ exists in database
+[0mPOST /api/secret-phrases/log-event [32m201[0m 114.694 ms - 177[0m
+[0mGET /health [32m200[0m 39.416 ms - 428[0m
+🔵 [DEBUG] Secret phrase route accessed: POST /log-event
+🔵 [DEBUG] Request body type: object
+🔵 [DEBUG] Request body: {"userId":"API_TEST_1767937861452","phraseKey":"26arbitrage","phraseCategory":"api_test","eventType":"discovery","inputText":"Testing API service configuration","sport":"NBA"}
+🔵 [DEBUG] Request headers: {"host":"localhost:3002","user-agent":"curl/8.7.1","accept":"*/*","content-type":"application/json","content-length":"228"}
+🔵 [SECRET_PHRASE] POST /log-event received
+🔵 [SECRET_PHRASE] Full req.body: {
+  userId: 'API_TEST_1767937861452',
+  phraseKey: '26arbitrage',
+  phraseCategory: 'api_test',
+  eventType: 'discovery',
+  inputText: 'Testing API service configuration',
+  sport: 'NBA'
+}
+🔵 [SECRET_PHRASE] Processing for user: API_TEST_1767937861452
+💾 [SECRET_PHRASE] Event created: 69609745ced627fd8591bae0
+✅ Saved to analyticsevents: new ObjectId('69609745ced627fd8591bae0')
+✅ Saved to secretphraseanalytics: new ObjectId('69609745ced627fd8591bae0')
+📊 Verification: Document ✅ exists in database
+[0mPOST /api/secret-phrases/log-event [32m201[0m 134.341 ms - 172[0m
+[0mGET /health [32m200[0m 62.955 ms - 428[0m
+🔵 [DEBUG] Secret phrase route accessed: POST /log-event
+🔵 [DEBUG] Request body type: object
+🔵 [DEBUG] Request body: {"userId":"CONFIG_TEST_1767938594347","phraseKey":"config_test","phraseCategory":"configuration","eventType":"test","inputText":"Testing updated configuration","sport":"NBA"}
+🔵 [DEBUG] Request headers: {"host":"localhost:3002","user-agent":"curl/8.7.1","accept":"*/*","content-type":"application/json","content-length":"227"}
+🔵 [SECRET_PHRASE] POST /log-event received
+🔵 [SECRET_PHRASE] Full req.body: {
+  userId: 'CONFIG_TEST_1767938594347',
+  phraseKey: 'config_test',
+  phraseCategory: 'configuration',
+  eventType: 'test',
+  inputText: 'Testing updated configuration',
+  sport: 'NBA'
+}
+🔵 [SECRET_PHRASE] Processing for user: CONFIG_TEST_1767938594347
+💾 [SECRET_PHRASE] Event created: 69609a22ced627fd8591bae1
+✅ Saved to analyticsevents: new ObjectId('69609a22ced627fd8591bae1')
+✅ Saved to secretphraseanalytics: new ObjectId('69609a22ced627fd8591bae1')
+📊 Verification: Document ✅ exists in database
+[0mPOST /api/secret-phrases/log-event [32m201[0m 121.350 ms - 175[0m
+[0mGET /health [32m200[0m 45.402 ms - 428[0m
+[0mGET /health [32m200[0m 35.948 ms - 427[0m
+[0mGET /health [32m200[0m 33.434 ms - 428[0m
+[0mGET /health [32m200[0m 98.026 ms - 427[0m
+[0mGET /health [32m200[0m 37.627 ms - 428[0m

@@ -1,0 +1,13 @@
+2026-01-11 14:57:30: ✅ RevenueCat REST API Service Initialized
+2026-01-11 14:57:30: 🎮 Live games routes loaded
+2026-01-11 14:57:30: ✅ Body parsers initialized
+2026-01-11 14:57:30: 🔗 Connecting to MongoDB...
+2026-01-11 14:57:31: ✅ MongoDB connected successfully
+2026-01-11 14:57:31: ✅ Database service initialized
+2026-01-11 14:57:31: ✅ Connected to Redis cache
+2026-01-11 14:57:31: 🚀 Initializing NBA Fantasy AI Backend...
+2026-01-11 14:57:31: 🔄 Connecting to MongoDB Atlas...
+2026-01-11 14:57:31: 📝 Using URI (masked): mongodb+srv://Jerryexon1:****@cluster0.6sqqrz.mongodb.net/sports-app?appName=Cluster0
+2026-01-11 14:57:31: ✅ Connected to MongoDB Atlas
+2026-01-11 14:57:31: ✅ WebSocket server initialized
+2026-01-11 14:57:31: Port 3002 is already in use.

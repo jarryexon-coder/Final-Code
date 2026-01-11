@@ -1,882 +1,1192 @@
-// 🚀 NBA FANTASY AI - COMPLETE CONSOLIDATED SERVER v4.1
-console.log('Starting NBA Fantasy AI - Complete Consolidated Server v4.1');
+// server.js - Complete NBA Fantasy AI Backend Server
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import mongoose from 'mongoose';
+import Redis from 'ioredis';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import fs from 'fs';
+import morgan from 'morgan';
 
-// =============================================================================
-// CORE IMPORTS & SETUP
-// =============================================================================
+// Load environment variables FIRST
+dotenv.config();
 
-require('dotenv').config();
+// ES module fix for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-const express = require('express');
-const bodyParser = require('body-parser');
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-const fs = require('fs').promises;
-const path = require('path');
-const cors = require('cors');
-const crypto = require('crypto');
-const http = require('http');
-const socketIo = require('socket.io');
-const mongoose = require('mongoose');
-const rateLimit = require('express-rate-limit');
-
-// =============================================================================
-// SPORTS SCHEDULER INTEGRATION (from index.js)
-// =============================================================================
-
-let sportsScheduler, createSportsRoutes;
-try {
-  const sportsSchedulerModule = require('./services/sports-scheduler');
-  sportsScheduler = sportsSchedulerModule.sportsScheduler;
-  createSportsRoutes = sportsSchedulerModule.createSportsRoutes;
-  console.log('🏀 Sports API Scheduler integrated');
-} catch (error) {
-  console.log('⚠️ Sports Scheduler not available, continuing without it:', error.message);
-  sportsScheduler = {};
-  createSportsRoutes = () => { return express.Router(); };
-}
-
-// =============================================================================
-// EXPRESS APP & HTTP SERVER SETUP
-// =============================================================================
+// Import route modules
+import nbaRoutes from './routes/nbaRoutes.js';
+import nhlRoutes from './routes/nhlRoutes.js';
+import nflRoutes from './routes/nflRoutes.js';
+import newsRoutes from './routes/newsRoutes.js';
+import fantasyRoutes from './routes/fantasyRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import revenuecatRoutes from './routes/revenuecatRoutes.js';
+import picksRouter from './routes/picks.js';
+import liveGamesRoutes from './routes/livegames.js';
 
 const app = express();
-const server = http.createServer(app);
+const PORT = process.env.PORT || 3002;
+const HOST = process.env.HOST || '0.0.0.0';
 
-// =============================================================================
-// RATE LIMITING MIDDLEWARE (from index.js)
-// =============================================================================
+// ====================
+// WEBSOCKET SERVER IMPLEMENTATION (INLINE VERSION)
+// ====================
+class WebSocketServer {
+  constructor(server) {
+    this.io = new Server(server, {
+      cors: {
+        origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE']
+      }
+    });
+    this.clients = new Map();
+    this.setupEventHandlers();
+  }
 
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
-});
+  setupEventHandlers() {
+    this.io.on('connection', (socket) => {
+      console.log(`✅ WebSocket client connected: ${socket.id}`);
+      
+      socket.on('register', (userId) => {
+        this.clients.set(userId, socket.id);
+        console.log(`📝 Client registered: ${userId} -> ${socket.id}`);
+      });
 
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 login attempts per windowMs
-  message: 'Too many authentication attempts, please try again later.'
-});
+      socket.on('disconnect', () => {
+        // Remove client from map
+        for (const [userId, socketId] of this.clients.entries()) {
+          if (socketId === socket.id) {
+            this.clients.delete(userId);
+            console.log(`❌ Client disconnected: ${userId}`);
+            break;
+          }
+        }
+      });
+    });
+  }
 
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // limit each IP to 10 requests per windowMs
-  message: 'Too many requests, please try again later.'
-});
+  broadcastSecretPhraseEvent(event) {
+    console.log(`📢 Broadcasting secret phrase event: ${event.event || 'unknown'}`);
+    this.io.emit('secret-phrase-event', event);
+  }
 
-app.use('/api/', apiLimiter);
-app.use('/api/auth/', authLimiter);
+  sendToUser(userId, event, data) {
+    const socketId = this.clients.get(userId);
+    if (socketId) {
+      this.io.to(socketId).emit(event, data);
+      console.log(`📨 Sent ${event} to user: ${userId}`);
+    }
+  }
 
-// =============================================================================
-// CORS MIDDLEWARE (enhanced from both files)
-// =============================================================================
+  broadcastToAll(event, data) {
+    this.io.emit(event, data);
+  }
 
-app.use(cors({
-  origin: [
-    'http://localhost:8081', 
-    'http://10.0.0.183:8081', 
-    'exp://10.0.0.183:8081',
-    'http://localhost:19000',
-    'http://localhost:19006', 
-    'http://10.0.0.183:19000',
-    'http://10.0.0.183:19006',
-    'exp://10.0.0.183:19000',
-    'https://*.exp.direct',
-    'https://*.expo.dev',
-    process.env.FRONTEND_URL
-  ].filter(Boolean),
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true
+  getConnectionCount() {
+    return this.io.engine.clientsCount || 0;
+  }
+}
+
+// ====================
+// SECURITY MIDDLEWARE ENHANCEMENTS
+// ====================
+
+// 1. Implement Basic Security with Helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https://assets.nhle.com"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
 }));
 
-// =============================================================================
-// DATABASE CONNECTION - MONGODB (improved from index.js)
-// =============================================================================
-
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ MongoDB connected successfully');
-  } catch (err) {
-    console.log('❌ MongoDB connection error:', err.message);
-    console.log('💡 Make sure MongoDB is installed and running');
-    process.exit(1);
-  }
-};
-
-connectDB();
-
-// =============================================================================
-// WEB SOCKET SETUP - REAL-TIME UPDATES
-// =============================================================================
-
-const io = socketIo(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
-
-io.on('connection', (socket) => {
-  console.log('New client connected:', socket.id);
-
-  socket.on('join-games', () => {
-    socket.join('live-games');
-    console.log(`Client ${socket.id} joined live-games room`);
-  });
-
-  socket.on('leave-games', () => {
-    socket.leave('live-games');
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
-  });
-});
-
-const broadcastGameUpdate = (gameData) => {
-  io.to('live-games').emit('game-update', gameData);
-};
-
-setInterval(() => {
-  const liveGames = [
-    {
-      id: 1,
-      home_team: "Lakers",
-      away_team: "Warriors", 
-      home_score: Math.floor(Math.random() * 120),
-      away_score: Math.floor(Math.random() * 120),
-      period: "4th",
-      time_remaining: "2:15",
-      status: "in_progress",
-      last_play: "LeBron James makes 2-pt jump shot"
-    }
-  ];
-  
-  broadcastGameUpdate(liveGames);
-}, 30000);
-
-app.set('io', io);
-
-// =============================================================================
-// STRIPE INITIALIZATION
-// =============================================================================
-
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-
-// =============================================================================
-// STRIPE WEBHOOK HANDLER
-// =============================================================================
-
-app.post('/stripe-webhook', 
-  express.raw({type: 'application/json'}),
-  (req, res) => {
-    const sig = req.headers['stripe-signature'];
-    let event;
-
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.body, 
-        sig, 
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-      console.log(`✅ Webhook received: ${event.type}`);
-    } catch (err) {
-      console.error('❌ Webhook signature verification failed:', err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    switch (event.type) {
-      case 'checkout.session.completed':
-        console.log('💰 Checkout completed!');
-        handleCheckoutCompleted(event.data.object);
-        break;
-      case 'customer.subscription.created':
-        console.log('🆕 Subscription created!');
-        handleSubscriptionCreated(event.data.object);
-        break;
-      case 'invoice.payment_succeeded':
-        console.log('💳 Payment succeeded!');
-        handlePaymentSucceeded(event.data.object);
-        break;
-      case 'customer.subscription.deleted':
-        console.log('❌ Subscription canceled!');
-        handleSubscriptionCanceled(event.data.object);
-        break;
-      default:
-        console.log(`Unhandled event type: ${event.type}`);
-    }
-
-    res.json({received: true});
-  }
+// ====================
+// Enhanced CSP Configuration
+// ====================
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "https://pleasing-determination-production.up.railway.app"],
+    },
+  })
 );
 
-async function handleCheckoutCompleted(session) {
-  console.log(`💰 Checkout completed for session: ${session.id}`);
-  console.log(`Customer: ${session.customer}, User: ${session.metadata?.userId}`);
+// ====================
+// Permissions Policy Headers
+// ====================
+app.use(
+  helmet.permittedCrossDomainPolicies({
+    permittedPolicies: "none",
+  })
+);
+
+app.use((req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=(), accelerometer=(), gyroscope=(), magnetometer=(), usb=()"
+  );
+  next();
+});
+
+// 2. Add logging middleware
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+// 3. Enhanced CORS configuration
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://yourapp.com']
+    : [
+        'http://localhost:19006',
+        'exp://192.168.*.*:19000',
+        'https://pleasing-determination-production.up.railway.app',
+        'http://localhost:8081',
+        'http://localhost:19000',
+        'http://localhost:3001',
+        'exp://localhost:19000',
+        process.env.FRONTEND_URL,
+        'https://yourapp.yourdomain.com'
+      ].filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// 4. Trust proxy & rate limiting
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
   
-  if (session.metadata?.userId) {
+  app.use('/api/', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: {
+      success: false,
+      error: 'Too many requests from this IP, please try again after 15 minutes'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  }));
+} else {
+  app.use('/api/', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500,
+    message: {
+      success: false,
+      error: 'Too many requests from this IP'
+    },
+    skip: (req) => req.ip === '127.0.0.1' || req.ip === '::1'
+  }));
+}
+
+// Additional security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
+// Create HTTP server for WebSocket support
+const httpServer = createServer(app);
+
+// ====================
+// INITIALIZE REDIS CLIENT FOR CACHING
+// ====================
+let redisClient;
+try {
+  if (process.env.REDIS_URL) {
+    redisClient = new Redis(process.env.REDIS_URL);
+    console.log('✅ Connected to Redis cache');
+  } else {
+    console.log('⚠️  Redis URL not configured, using in-memory cache');
+  }
+} catch (error) {
+  console.error('❌ Redis connection error:', error.message);
+}
+
+// ====================
+// CACHE SERVICE
+// ====================
+const cacheService = {
+  async getOrSet(key, fetchData, ttl = 300) {
+    if (!redisClient) {
+      return await fetchData();
+    }
+    
     try {
-      console.log(`✅ User ${session.metadata.userId} subscription updated`);
+      const cached = await redisClient.get(key);
+      if (cached) {
+        console.log(`📦 Cache hit: ${key}`);
+        return JSON.parse(cached);
+      }
+      
+      const data = await fetchData();
+      await redisClient.setex(key, ttl, JSON.stringify(data));
+      console.log(`📦 Cache set: ${key} (TTL: ${ttl}s)`);
+      return data;
     } catch (error) {
-      console.error('Error updating user subscription:', error);
+      console.error(`Cache error for ${key}:`, error);
+      return await fetchData();
     }
-  }
-}
-
-async function handleSubscriptionCreated(subscription) {
-  console.log(`🆕 Subscription created: ${subscription.id}`);
-}
-
-async function handleSubscriptionCanceled(subscription) {
-  console.log(`❌ Subscription canceled: ${subscription.id}`);
-}
-
-async function handlePaymentSucceeded(invoice) {
-  console.log(`💳 Payment succeeded for invoice: ${invoice.id}`);
-}
-
-// =============================================================================
-// REGULAR MIDDLEWARE
-// =============================================================================
-
-app.use(express.json());
-app.use(bodyParser.json());
-
-// =============================================================================
-// SERVICE IMPORTS
-// =============================================================================
-
-// Mock services for demonstration - these would be your actual service files
-const NBADataService = {
-  getPlayerStats: async (playerName) => ({
-    name: playerName,
-    points: Math.floor(Math.random() * 40),
-    rebounds: Math.floor(Math.random() * 15),
-    assists: Math.floor(Math.random() * 12),
-    team: "Mock Team"
-  })
-};
-
-const AIPredictionService = {
-  predictPlayerPerformance: async (player, game, context) => ({
-    player: player.name,
-    predictedPoints: Math.floor(Math.random() * 35) + 10,
-    predictedRebounds: Math.floor(Math.random() * 12) + 3,
-    predictedAssists: Math.floor(Math.random() * 10) + 2,
-    confidence: Math.floor(Math.random() * 30) + 70
-  })
-};
-
-const AnalyticsService = {
-  trackEvent: (userId, eventType, data) => ({
-    id: Math.random().toString(36).substr(2, 9),
-    userId,
-    eventType,
-    data,
-    timestamp: new Date().toISOString()
-  }),
-  getUserAnalytics: (userId) => ({
-    userId,
-    totalEvents: Math.floor(Math.random() * 100),
-    lastActive: new Date().toISOString()
-  })
-};
-
-const NBAApiService = {
-  getPlayerStats: async (playerName) => ({
-    name: playerName,
-    team: "Mock Team",
-    position: "G",
-    points: 28.1,
-    rebounds: 7.2,
-    assists: 8.5
-  }),
-  getTodaysGames: async () => [
-    {
-      id: 1,
-      home_team: "Lakers",
-      away_team: "Warriors",
-      time: "7:30 PM ET",
-      status: "Upcoming"
-    }
-  ]
-};
-
-const BettingAlgorithms = {
-  calculateValueBets: () => [
-    {
-      game: 'Lakers vs Warriors',
-      market: 'Moneyline',
-      pick: 'Lakers',
-      odds: 2.10,
-      edge: 5.2,
-      confidence: 'High'
-    }
-  ]
-};
-
-// =============================================================================
-// FIREBASE CONFIGURATION
-// =============================================================================
-
-// Mock Firebase configuration
-const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.FIREBASE_PROJECT_ID
-};
-
-const db = {
-  collection: () => ({
-    doc: () => ({
-      get: async () => ({ exists: true, data: () => ({}) }),
-      set: async () => {},
-      update: async () => {}
-    })
-  })
-};
-
-// =============================================================================
-// FIREBASE ADMIN CONFIGURATION
-// =============================================================================
-
-const initializeFirebaseAdmin = () => {
-  console.log('✅ Firebase Admin SDK initialized');
-};
-
-const getFirestore = () => db;
-const getAuth = () => ({});
-
-try {
-  initializeFirebaseAdmin();
-  console.log('✅ Firebase Admin SDK initialized');
-} catch (error) {
-  console.log('⚠️ Firebase Admin SDK initialization skipped:', error.message);
-}
-
-// =============================================================================
-// STRIPE PRODUCTS CONFIGURATION
-// =============================================================================
-
-const STRIPE_PRODUCTS = {
-  weekly: {
-    priceId: process.env.STRIPE_WEEKLY_PRICE_ID || 'price_weekly_499',
-    name: 'NBA Fantasy AI Pro Weekly',
-    description: 'Weekly access for tournament players & weekend warriors',
-    amount: 499,
-    interval: 'week'
   },
-  monthly: {
-    priceId: process.env.STRIPE_MONTHLY_PRICE_ID || 'price_monthly_999', 
-    name: 'NBA Fantasy AI Premium Monthly',
-    description: 'AI-powered insights for serious fantasy players',
-    amount: 999,
-    interval: 'month'
+  
+  async invalidate(key) {
+    if (redisClient) {
+      await redisClient.del(key);
+      console.log(`📦 Cache invalidated: ${key}`);
+    }
   },
-  yearly: {
-    priceId: process.env.STRIPE_YEARLY_PRICE_ID || 'price_yearly_9999',
-    name: 'NBA Fantasy AI Premium Yearly', 
-    description: 'Best value - 2 months free with annual commitment',
-    amount: 9999,
-    interval: 'year'
-  }
-};
-
-// =============================================================================
-// ROUTE IMPORTS FROM ROUTES DIRECTORY (from index.js)
-// =============================================================================
-
-let authRoutes, nbaRoutes;
-try {
-  authRoutes = require('./routes/auth');
-  nbaRoutes = require('./routes/nba');
-  console.log('✅ Route modules loaded successfully');
-} catch (error) {
-  console.log('⚠️ Route modules not found, using mock routes:', error.message);
   
-  // Fallback mock routes
-  authRoutes = express.Router();
-  nbaRoutes = express.Router();
-  
-  // Mock auth routes
-  authRoutes.post('/register', (req, res) => {
-    res.json({ success: true, message: 'User registered successfully' });
-  });
-
-  authRoutes.post('/login', (req, res) => {
-    res.json({ success: true, token: 'mock-jwt-token', user: { id: 1, email: req.body.email } });
-  });
-
-  // Mock NBA routes
-  nbaRoutes.get('/players', (req, res) => {
-    res.json({ success: true, players: [] });
-  });
-
-  nbaRoutes.get('/games', (req, res) => {
-    res.json({ success: true, games: [] });
-  });
-}
-
-// =============================================================================
-// ROUTE DECLARATIONS
-// =============================================================================
-
-app.use('/api/auth', authRoutes);
-app.use('/api/nba', nbaRoutes);
-app.use('/api/sports', createSportsRoutes(sportsScheduler));
-// Promo Code Routes
-const validatePromoRouter = require("./routes/promo/validate");
-const applyPromoRouter = require("./routes/promo/apply");
-const publicPromoRouter = require("./routes/promo/public");
-
-app.use("/api/promo/validate", validatePromoRouter);
-app.use("/api/promo/apply", applyPromoRouter);
-app.use("/api/promo/public", publicPromoRouter);
-
-// =============================================================================
-// CORE ENDPOINTS
-// =============================================================================
-
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
-    success: true, 
-    timestamp: new Date().toISOString() 
-  });
-});
-
-app.get('/', (req, res) => {
-  res.json({
-    message: '🏀 NBA Fantasy API Server',
-    version: '4.1.0',
-    features: {
-      authentication: 'JWT + MongoDB',
-      realtime: 'WebSocket Live Updates',
-      database: 'MongoDB + Firebase',
-      payments: 'Stripe Integration',
-      sportsScheduler: 'Integrated',
-      endpoints: {
-        health: '/health',
-        auth: '/api/auth/*',
-        nba: '/api/nba/*',
-        sports: '/api/sports/*',
-        playerStats: '/api/nba/player/{name}',
-        allPlayers: '/api/nba/players',
-        gamesToday: '/api/nba/games/today',
-        fantasyAdvice: '/api/nba/fantasy/advice'
+  async invalidatePattern(pattern) {
+    if (redisClient) {
+      const keys = await redisClient.keys(pattern);
+      if (keys.length > 0) {
+        await redisClient.del(...keys);
+        console.log(`📦 Cache invalidated pattern: ${pattern} (${keys.length} keys)`);
       }
     }
-  });
+  }
+};
+
+// Global cache middleware
+app.use((req, res, next) => {
+  req.cacheService = cacheService;
+  if (redisClient) {
+    req.redis = redisClient;
+  }
+  next();
 });
 
-// =============================================================================
-// FANTASY DATA - MOCK DATA
-// =============================================================================
-
-const mockFantasyTeams = [
-  {
-    id: 1,
-    name: "Dream Team",
-    points: 1245,
-    rank: 3,
-    players: ["LeBron James", "Stephen Curry", "Anthony Davis"]
-  },
-  {
-    id: 2,
-    name: "The Goats",
-    points: 1180,
-    rank: 7,
-    players: ["Luka Doncic", "Kevin Durant", "Giannis Antetokounmpo"]
-  }
-];
-
-// =============================================================================
-// NBA DATA ENDPOINTS (CRITICAL - YOUR MISSING ENDPOINTS)
-// =============================================================================
-
-// Players Search Endpoint
-app.get('/api/nba/players/search', async (req, res) => {
-  try {
-    const { q } = req.query;
-    if (!q) {
-      return res.status(400).json({
-        success: false,
-        error: 'Query parameter "q" is required'
+// ====================
+// DATABASE CONNECTION (UPDATED FROM FILE 2)
+// ====================
+const connectDB = async () => {
+  const maxRetries = 5;
+  let retryCount = 0;
+  
+  while (retryCount < maxRetries) {
+    try {
+      if (!process.env.MONGODB_URI) {
+        console.warn('⚠️  MONGODB_URI not configured');
+        return;
+      }
+      
+      await mongoose.connect(process.env.MONGODB_URI, {
+        serverSelectionTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+        maxPoolSize: 10,
       });
+    
+// MongoDB connection event handlers
+mongoose.connection.on('connected', () => {
+  console.log('✅ MongoDB connected successfully');
+  global.isMongoConnected = true;
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err.message);
+  global.isMongoConnected = false;
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️  MongoDB disconnected');
+  global.isMongoConnected = false;
+});
+
+      
+      console.log('✅ Connected to MongoDB Atlas');
+      return; // Success, exit function
+      
+    } catch (error) {
+      retryCount++;
+      console.error(`❌ MongoDB connection attempt ${retryCount}/${maxRetries} failed:`, error.message);
+      
+      if (retryCount >= maxRetries) {
+        console.error('🔥 All MongoDB connection attempts failed');
+        throw error; // Let the calling function handle it
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const delay = Math.min(1000 * Math.pow(2, retryCount), 10000);
+      console.log(`🔄 Retrying in ${delay/1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
     }
-
-    // Mock search results
-    const mockPlayers = [
-      {
-        id: 1,
-        name: "LeBron James",
-        team: "Los Angeles Lakers",
-        position: "F"
-      },
-      {
-        id: 2,
-        name: "Stephen Curry", 
-        team: "Golden State Warriors",
-        position: "G"
-      }
-    ].filter(player => 
-      player.name.toLowerCase().includes(q.toLowerCase())
-    );
-
-    res.json({
-      success: true,
-      data: mockPlayers
-    });
-  } catch (error) {
-    console.error('Player search error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to search players'
-    });
   }
+};
+
+// ====================
+// ANALYTICS MODEL
+// ====================
+const analyticsEventSchema = new mongoose.Schema({
+  event: {
+    type: String,
+    required: true,
+    index: true
+  },
+  userId: {
+    type: String,
+    default: 'anonymous',
+    index: true
+  },
+  properties: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+  timestamp: {
+    type: Date,
+    default: Date.now,
+    index: true
+  },
+  userAgent: String,
+  ip: String,
+  path: String,
+  sessionId: String,
+  deviceType: String
 });
 
-// Player Stats Endpoint
-app.get('/api/nba/player/:playerName', async (req, res) => {
+analyticsEventSchema.index({ event: 1, timestamp: -1 });
+analyticsEventSchema.index({ userId: 1, timestamp: -1 });
+
+const AnalyticsEvent = mongoose.model('AnalyticsEvent', analyticsEventSchema);
+
+// ====================
+// ROUTE REGISTRATION
+// ====================
+
+// Health check (must be before other routes)
+app.get('/health', async (req, res) => {
+  const mongoStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+  const redisStatus = req.redis?.status === 'ready' ? 'connected' : 'disconnected';
+  
+  // Test MongoDB with a simple ping
+  let mongoTest = 'disconnected';
   try {
-    const { playerName } = req.params;
-    const playerData = await NBAApiService.getPlayerStats(playerName);
-    res.json({
-      success: true,
-      data: playerData
-    });
+    await mongoose.connection.db.admin().ping();
+    mongoTest = 'connected';
   } catch (error) {
-    console.error('Player stats error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch player data'
-    });
+    mongoTest = 'error';
   }
-});
-
-// Games Today Endpoint (YOUR MISSING ENDPOINT)
-app.get('/api/nba/games/today', (req, res) => {
-  console.log('📅 Games today endpoint hit');
-  try {
-    const todayGames = [
-      {
-        id: 1,
-        home_team: "Lakers",
-        away_team: "Warriors",
-        time: "7:30 PM ET",
-        status: "Upcoming",
-        home_score: 0,
-        away_score: 0
-      },
-      {
-        id: 2, 
-        home_team: "Celtics",
-        away_team: "Heat",
-        time: "8:00 PM ET", 
-        status: "Upcoming",
-        home_score: 0,
-        away_score: 0
-      }
-    ];
-    res.json(todayGames);
-  } catch (error) {
-    console.error('Error in games today endpoint:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Live Games Endpoint
-app.get('/api/nba/games/live', (req, res) => {
-  console.log('📡 Live games endpoint hit');
-  try {
-    const liveGames = [
-      {
-        id: 1,
-        home_team: "Lakers",
-        away_team: "Warriors", 
-        home_score: Math.floor(Math.random() * 120),
-        away_score: Math.floor(Math.random() * 120),
-        period: "4th",
-        time_remaining: "2:15",
-        status: "in_progress",
-        last_play: "LeBron James makes 2-pt jump shot"
-      }
-    ];
-    res.json(liveGames);
-  } catch (error) {
-    console.error('Error in live games endpoint:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// =============================================================================
-// FANTASY ENDPOINTS (YOUR MISSING ENDPOINT)
-// =============================================================================
-
-// Fantasy Advice Endpoint (YOUR MISSING ENDPOINT)
-app.get('/api/nba/fantasy/advice', (req, res) => {
-  console.log('📊 Fantasy advice endpoint hit');
-  try {
-    const mockFantasyAdvice = [
-      {
-        player: "LeBron James",
-        recommendation: "START",
-        confidence: 85,
-        reason: "High minutes expected against weak defense, coming off rest day"
-      },
-      {
-        player: "Stephen Curry", 
-        recommendation: "START",
-        confidence: 92,
-        reason: "Favorable matchup at home, hot shooting streak"
-      },
-      {
-        player: "Luka Doncic",
-        recommendation: "SIT", 
-        confidence: 78,
-        reason: "Back-to-back game, possible minutes restriction"
-      }
-    ];
-    
-    // Add some randomness to simulate live data
-    const dynamicAdvice = mockFantasyAdvice.map(advice => ({
-      ...advice,
-      confidence: Math.max(50, Math.min(95, advice.confidence + Math.floor(Math.random() * 10 - 5)))
-    }));
-    
-    res.json(dynamicAdvice);
-  } catch (error) {
-    console.error('Error in fantasy advice endpoint:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-// Fantasy Teams Endpoints
-app.get('/api/fantasy/my-teams', (req, res) => {
-  console.log('🏀 My teams endpoint hit');
-  try {
-    const mockTeams = [
-      {
-        id: 1,
-        name: "Dream Team",
-        points: 1245,
-        rank: 3,
-        players: ["LeBron James", "Stephen Curry", "Anthony Davis"]
-      }
-    ];
-    res.json(mockTeams);
-  } catch (error) {
-    console.error('Error in my teams endpoint:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/fantasy/create', (req, res) => {
-  console.log('➕ Create fantasy team endpoint hit');
-  try {
-    const { name, players } = req.body;
-    
-    if (!name) {
-      return res.status(400).json({ error: 'Team name is required' });
+  
+  res.status(200).json({
+    status: 'healthy',
+    service: 'NBA Fantasy AI Backend',
+    version: '4.2.0',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    memory: process.memoryUsage(),
+    databases: {
+      mongodb: mongoStatus,
+      redis: redisStatus,
+      mongoTest: mongoTest
     }
-    
-    const newTeam = {
-      id: mockFantasyTeams.length + 1,
-      name,
-      players: players || [],
-      points: 0,
-      rank: mockFantasyTeams.length + 1
+  });
+});
+
+// API Documentation
+app.get('/api', (req, res) => {
+  res.json({
+    name: 'NBA Fantasy AI Backend API',
+    version: '4.2.0',
+    documentation: 'See /api-docs for detailed documentation',
+    endpoints: {
+      nba: '/api/nba/*',
+      nhl: '/api/nhl/*',
+      nfl: '/api/nfl/*',
+      news: '/api/news/*',
+      fantasy: '/api/fantasy/*',
+      analytics: '/api/analytics/*',
+      auth: '/api/auth/*',
+      admin: '/api/admin/*',
+      picks: '/api/picks/*',
+      dailyPicks: '/api/daily-picks',
+      aiPredictions: '/api/ai-predictions',
+      expertPicks: '/api/expert-picks',
+      games: '/api/games/*',
+      health: '/health',
+      dashboard: '/admin/dashboard'
+    }
+  });
+});
+
+// Mount routes
+app.use('/api/games', liveGamesRoutes);
+app.use('/api/nhl', nhlRoutes);
+app.use('/api/nba', nbaRoutes);
+app.use('/api/nfl', nflRoutes);
+app.use('/api/news', newsRoutes);
+app.use('/api/fantasy', fantasyRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/revenuecat', revenuecatRoutes);
+app.use('/api/picks', picksRouter);
+
+// ====================
+// ADD SECRET PHRASE ROUTES (FROM FILE 1)
+// ====================
+// First, let's create a temporary secret phrase routes if it doesn't exist
+const secretPhraseRouter = express.Router();
+
+secretPhraseRouter.get('/', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Secret phrases endpoint is working',
+    routes: ['GET /', 'POST /log-event', 'GET /analytics']
+  });
+});
+
+// FIXED: Removed duplicate route handler for '/log-event'
+secretPhraseRouter.post('/log-event', async (req, res) => {
+  try {
+    // For now, simulate event creation
+    const event = {
+      ...req.body,
+      _id: new mongoose.Types.ObjectId(),
+      timestamp: new Date()
     };
     
-    mockFantasyTeams.push(newTeam);
+    // ✅ ADDED: Save to MongoDB
+    try {
+      
+    // ✅ Check MongoDB connection before saving
+    if (!global.isMongoConnected || !mongoose.connection.db) {
+      console.warn('⚠️  MongoDB not connected, skipping database save');
+    } else {
+      try {
+        const db = mongoose.connection.db;
+        console.log('💾 Saving secret phrase to MongoDB...');
+        
+        // Save to analyticsevents collection
+        await db.collection('analyticsevents').insertOne(event);
+        console.log('✅ Secret phrase saved to analyticsevents:', event._id.toString());
+        
+        // Also save to dedicated collection
+        await db.collection('secretphraseanalytics').insertOne({
+          ...event,
+          eventId: event._id.toString()
+        });
+        console.log('✅ Also saved to secretphraseanalytics collection');
+        
+      } catch (dbError) {
+        console.error('❌ Database save error:', dbError.message);
+      }
+    }
+    const db = mongoose.connection.db;
+      await db.collection('analyticsevents').insertOne(event);
+      console.log('✅ Secret phrase saved to analyticsevents:', event._id.toString());
+      await db.collection('secretphraseanalytics').insertOne({
+        ...event,
+        eventId: event._id.toString()
+      });
+      console.log('✅ Also saved to secretphraseanalytics collection');
+    } catch (dbError) {
+      console.error('❌ Database save error (but continuing):', dbError.message);
+    }
     
-    res.json({ success: true, team: newTeam });
+    // ✅ ADD THIS CODE TO SAVE TO MONGODB:
+    try {
+      // Save to the 'analyticsevents' collection (which already exists)
+      const db = mongoose.connection.db;
+      const result = await db.collection('analyticsevents').insertOne(event);
+      console.log('✅ Secret phrase saved to MongoDB:', event._id.toString());
+      
+      // Also save to a dedicated collection for easier querying
+      await db.collection('secretphraseanalytics').insertOne({
+        ...event,
+        eventId: event._id.toString(),
+        savedAt: new Date()
+      });
+      
+    } catch (dbError) {
+      console.error('❌ Database save error (continuing anyway):', dbError.message);
+    }
+    
+    // Broadcast via WebSocket
+    const wsServer = req.app.locals.wsServer;
+    if (wsServer && wsServer.broadcastSecretPhraseEvent) {
+      wsServer.broadcastSecretPhraseEvent(event);
+    }
+    
+    res.status(201).json({ 
+      success: true, 
+      eventId: event._id.toString(),
+      message: 'Secret phrase logged successfully'
+    });
   } catch (error) {
-    console.error('Error creating fantasy team:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// =============================================================================
-// BETTING ENDPOINTS
-// =============================================================================
-
-app.get('/api/betting/value-bets/today', (req, res) => {
-  console.log('🎲 Value bets endpoint hit');
+secretPhraseRouter.get('/analytics', async (req, res) => {
   try {
-    const valueBets = [
-      {
-        game: 'Lakers vs Warriors',
-        market: 'Moneyline',
-        pick: 'Lakers',
-        odds: 2.10,
-        edge: 5.2,
-        confidence: 'High'
-      }
-    ];
+    const analytics = {
+      totalEvents: 0,
+      todayEvents: 0,
+      topPhrases: [],
+      timestamp: new Date().toISOString()
+    };
     
+    res.json({ success: true, analytics });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.use('/api/secret-phrases', secretPhraseRouter);
+
+// ====================
+// ADDITIONAL BACKEND ROUTES (FROM FILE 1)
+// ====================
+const additionalRouter = express.Router();
+
+// Backend routes from File 1
+additionalRouter.get('/real-time', async (req, res) => {
+  // Implementation for real-time data
+  try {
+    const wsServer = req.app.locals.wsServer;
+    const realTimeData = {
+      timestamp: new Date().toISOString(),
+      activeUsers: wsServer ? wsServer.getConnectionCount() : 0,
+      eventsPerSecond: Math.random() * 10,
+      memoryUsage: process.memoryUsage(),
+      uptime: process.uptime()
+    };
+    res.json({ success: true, data: realTimeData });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+additionalRouter.get('/export/csv', async (req, res) => {
+  // CSV export implementation
+  try {
+    const { startDate, endDate } = req.query;
+    // In a real implementation, fetch data and convert to CSV
+    const csvData = "Date,Event,Count\n2024-01-01,login,150\n2024-01-01,view,300";
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=analytics_export.csv');
+    res.send(csvData);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+additionalRouter.get('/trends', async (req, res) => {
+  // Trends implementation
+  try {
+    const trends = await AnalyticsEvent.aggregate([
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: "%Y-%m-%d", date: "$timestamp" }
+          },
+          count: { $sum: 1 },
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      { $sort: { _id: 1 } },
+      { $limit: 30 }
+    ]);
+    
+    res.json({ success: true, trends });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+additionalRouter.get('/insights/discovery', async (req, res) => {
+  // Discovery insights
+  try {
+    const insights = await AnalyticsEvent.aggregate([
+      {
+        $group: {
+          _id: "$event",
+          count: { $sum: 1 },
+          avgDuration: { $avg: "$properties.duration" },
+          uniqueUsers: { $addToSet: "$userId" }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 10 }
+    ]);
+    
+    res.json({ success: true, insights });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+additionalRouter.post('/recommendations', async (req, res) => {
+  // Recommendations implementation
+  try {
+    const { userId, preferences } = req.body;
+    
+    const recommendations = {
+      basedOnHistory: ["NBA Games", "Player Stats", "Live Scores"],
+      trending: ["Warriors vs Lakers", "Top Scorers", "Injury Updates"],
+      personalized: ["Your Favorite Teams", "Player Alerts"]
+    };
+    
+    res.json({ success: true, recommendations });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+additionalRouter.put('/performance/:phraseKey', async (req, res) => {
+  // Update performance (admin only)
+  try {
+    const { phraseKey } = req.params;
+    const updates = req.body;
+    
+    // In a real implementation, update in database
+    const updatedPhrase = {
+      ...updates,
+      phraseKey,
+      updatedAt: new Date().toISOString(),
+      updatedBy: req.user?.id || 'system'
+    };
+    
+    res.json({ success: true, data: updatedPhrase });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+additionalRouter.get('/heatmap/usage', async (req, res) => {
+  // Usage heatmap
+  try {
+    const heatmapData = await AnalyticsEvent.aggregate([
+      {
+        $group: {
+          _id: {
+            hour: { $hour: "$timestamp" },
+            dayOfWeek: { $dayOfWeek: "$timestamp" }
+          },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    res.json({ success: true, heatmap: heatmapData });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+additionalRouter.post('/analysis/correlation', async (req, res) => {
+  // Correlation analysis
+  try {
+    const { variables, timeframe } = req.body;
+    
+    const correlationResults = {
+      variables,
+      timeframe,
+      correlations: [
+        { var1: "userActivity", var2: "gamePopularity", coefficient: 0.85 },
+        { var1: "timeOfDay", var2: "engagement", coefficient: 0.72 }
+      ],
+      insights: ["Peak usage during game hours", "Weekends show 40% higher engagement"]
+    };
+    
+    res.json({ success: true, analysis: correlationResults });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Mount additional routes
+app.use('/api', additionalRouter);
+
+// Basic route
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'NBA Dialogflow Webhook Server is running!',
+    status: 'OK',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Webhook endpoint for Dialogflow
+app.post('/webhook', async (req, res) => {
+  console.log('Received webhook request:', req.body);
+  
+  try {
+    const intent = req.body.queryResult.intent.displayName;
+    const parameters = req.body.queryResult.parameters;
+    
+    let responseText = '';
+    
+    switch(intent) {
+      case 'GetTeamInfo':
+        const teamName = parameters.team;
+        responseText = `I would fetch info for the ${teamName}, but need to connect to NBA API first.`;
+        break;
+      default:
+        responseText = "I received your NBA request but haven't implemented this yet.";
+    }
+    
+    res.json({
+      fulfillmentText: responseText
+    });
+    
+  } catch (error) {
+    console.error('Error:', error);
+    res.json({
+      fulfillmentText: 'Sorry, I encountered an error processing your NBA request.'
+    });
+  }
+});
+
+// ====================
+// DASHBOARD CODE
+// ====================
+const dashboardPath = path.join(__dirname, 'dashboard');
+if (fs.existsSync(dashboardPath)) {
+  app.use('/dashboard', express.static(dashboardPath));
+  console.log('✅ Dashboard static files served from /dashboard');
+} else {
+  console.log('⚠️  Dashboard directory not found, creating placeholder');
+  
+  const dashboardHTML = `
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA Fantasy AI Dashboard</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+      .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
+      h1 { color: #1d4289; }
+      .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 0; }
+      .stat-card { background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #1d4289; }
+      .stat-value { font-size: 2em; font-weight: bold; color: #1d4289; }
+      .stat-label { color: #666; margin-top: 5px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🏀 NBA Fantasy AI Admin Dashboard</h1>
+      <p>Welcome to the admin dashboard. Analytics data will be displayed here.</p>
+      
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="todayEvents">0</div>
+          <div class="stat-label">Events Today</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="totalEvents">0</div>
+          <div class="stat-label">Total Events</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="activeUsers">0</div>
+          <div class="stat-label">Active Users</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="topEvent">-</div>
+          <div class="stat-label">Top Event</div>
+        </div>
+      </div>
+      
+      <div style="margin-top: 40px;">
+        <h3>Security Status</h3>
+        <ul>
+          <li>✅ Helmet Security Headers: Active</li>
+          <li>✅ CORS Configuration: ${process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}</li>
+          <li>✅ Rate Limiting: Active (${process.env.NODE_ENV === 'production' ? '100 req/15min' : '500 req/15min'})</li>
+          <li>✅ Morgan Logging: Active (${process.env.NODE_ENV === 'production' ? 'combined' : 'dev'} format)</li>
+          <li>${process.env.SENTRY_DSN ? '✅ Sentry Error Tracking: Active' : '⚠️ Sentry Error Tracking: Not configured'}</li>
+        </ul>
+        
+        <h3>Quick Links</h3>
+        <ul>
+          <li><a href="/api/analytics/summary">Analytics Summary</a></li>
+          <li><a href="/api/analytics/events">View All Events</a></li>
+          <li><a href="/api">API Documentation</a></li>
+          <li><a href="/health">System Health</a></li>
+        </ul>
+      </div>
+    </div>
+    
+    <script>
+      async function loadDashboardStats() {
+        try {
+          const response = await fetch('/api/analytics/summary');
+          const data = await response.json();
+          
+          if (data.success) {
+            document.getElementById('todayEvents').textContent = data.data.today_events.toLocaleString();
+            document.getElementById('totalEvents').textContent = data.data.total_events.toLocaleString();
+            document.getElementById('activeUsers').textContent = data.data.weekly_active_users.toLocaleString();
+            if (data.data.top_events && data.data.top_events.length > 0) {
+              document.getElementById('topEvent').textContent = data.data.top_events[0]._id;
+            }
+          }
+        } catch (error) {
+          console.error('Failed to load dashboard stats:', error);
+        }
+      }
+      
+      loadDashboardStats();
+      setInterval(loadDashboardStats, 30010);
+    </script>
+  </body>
+  </html>`;
+  
+  app.get('/admin/dashboard', (req, res) => {
+    res.send(dashboardHTML);
+  });
+  
+  console.log('✅ Dashboard route created at /admin/dashboard');
+}
+
+// ====================
+// CACHED API ENDPOINTS
+// ====================
+
+app.get('/api/nba/games', async (req, res) => {
+  try {
+    const cacheKey = 'nba:games';
+    
+    const games = await req.cacheService.getOrSet(cacheKey, async () => {
+      return [
+        {
+          id: 1,
+          homeTeam: 'Los Angeles Lakers',
+          awayTeam: 'Golden State Warriors',
+          homeScore: 108,
+          awayScore: 105,
+          quarter: '4th',
+          timeRemaining: '2:14',
+          status: 'live',
+          date: new Date().toISOString(),
+          arena: 'Crypto.com Arena'
+        },
+        {
+          id: 2,
+          homeTeam: 'Boston Celtics',
+          awayTeam: 'Miami Heat',
+          homeScore: 95,
+          awayScore: 89,
+          quarter: '3rd',
+          timeRemaining: '5:42',
+          status: 'live',
+          date: new Date().toISOString(),
+          arena: 'TD Garden'
+        }
+      ];
+    }, 300);
+    
+    res.json({
+      success: true,
+      count: games.length,
+      games,
+      cached: true,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error in /api/nba/games:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+app.get('/api/news/latest', async (req, res) => {
+  try {
+    const cacheKey = 'news:latest';
+    
+    const news = await req.cacheService.getOrSet(cacheKey, async () => {
+      return [
+        {
+          id: 1,
+          title: 'NBA Trade Deadline Approaching',
+          description: 'Teams making final moves before the deadline',
+          source: 'ESPN',
+          date: new Date().toISOString(),
+          category: 'NBA',
+          image: 'https://example.com/news1.jpg'
+        },
+        {
+          id: 2,
+          title: 'Injury Report Updates',
+          description: 'Key players returning from injury',
+          source: 'NBA.com',
+          date: new Date().toISOString(),
+          category: 'Injuries',
+          image: 'https://example.com/news2.jpg'
+        }
+      ];
+    }, 300);
+    
+    res.json({
+      success: true,
+      news,
+      count: news.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error in /api/news/latest:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
+
+// ====================
+// ANALYTICS ENDPOINTS
+// ====================
+app.post('/api/v1/analytics/track', async (req, res) => {
+  try {
+    const { event, userId, properties } = req.body;
+    
+    const analyticsEvent = new AnalyticsEvent({
+      event,
+      userId: userId || 'anonymous',
+      properties: properties || {},
+      timestamp: new Date(),
+      userAgent: req.get('User-Agent'),
+      ip: req.ip,
+      path: req.originalUrl
+    });
+    
+    await analyticsEvent.save();
+    
+    if (redisClient) {
+      await redisClient.lPush('recent_events', JSON.stringify({
+        event,
+        userId: analyticsEvent.userId,
+        timestamp: analyticsEvent.timestamp
+      }));
+      await redisClient.lTrim('recent_events', 0, 99);
+    }
+    
+    console.log(`📊 Tracked event: ${event} for user: ${analyticsEvent.userId}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Event tracked',
+      eventId: analyticsEvent._id
+    });
+  } catch (error) {
+    console.error('Analytics tracking error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/analytics/summary', async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const oneWeekAgo = new Date(today);
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const todayEvents = await AnalyticsEvent.countDocuments({
+      timestamp: { $gte: today }
+    });
+
+    const totalEvents = await AnalyticsEvent.countDocuments();
+    
+    const weeklyActiveUsers = await AnalyticsEvent.aggregate([
+      {
+        $match: {
+          timestamp: { $gte: oneWeekAgo }
+        }
+      },
+      {
+        $group: {
+          _id: "$userId",
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $count: "uniqueUsers"
+      }
+    ]);
+
+    const topEvents = await AnalyticsEvent.aggregate([
+      {
+        $group: {
+          _id: "$event",
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $sort: { count: -1 }
+      },
+      {
+        $limit: 5
+      }
+    ]);
+
     res.json({
       success: true,
       data: {
-        valueBets: valueBets,
-        generatedAt: new Date().toISOString()
+        today_events: todayEvents,
+        total_events: totalEvents,
+        weekly_active_users: weeklyActiveUsers.length > 0 ? weeklyActiveUsers[0].uniqueUsers : 0,
+        top_events: topEvents,
+        timestamp: new Date().toISOString()
       }
     });
   } catch (error) {
-    console.error('Error in value bets endpoint:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('Error in /api/analytics/summary:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Analytics database error',
+      message: error.message 
+    });
   }
 });
 
-// =============================================================================
-// AI PREDICTION ENDPOINTS
-// =============================================================================
-
-app.get('/api/ai/predictions/player/:playerName', async (req, res) => {
+// ====================
+// DAILY PICKS ENDPOINTS
+// ====================
+app.get('/api/daily-picks', async (req, res) => {
   try {
-    const { playerName } = req.params;
-    const prediction = await AIPredictionService.predictPlayerPerformance(
-      { name: playerName },
-      null,
-      { homeGame: true }
-    );
-    res.json(prediction);
+    const { sport, date } = req.query;
+    const cacheKey = `picks:daily:${sport || 'all'}:${date || 'today'}`;
+    
+    const picks = await req.cacheService.getOrSet(cacheKey, async () => {
+      return [
+        {
+          id: 1,
+          sport: sport || 'NBA',
+          player: 'Stephen Curry',
+          team: 'Golden State Warriors',
+          pickType: 'Over',
+          stat: 'Points',
+          line: 28.5,
+          confidence: 85,
+          reasoning: 'High-scoring game vs Lakers, favorable matchup',
+          timestamp: new Date().toISOString()
+        }
+      ];
+    }, 600);
+    
+    res.json({
+      success: true,
+      picks,
+      timestamp: new Date().toISOString(),
+      meta: {
+        sport,
+        date,
+        totalPicks: picks.length,
+      }
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching daily picks:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch picks' });
   }
 });
 
-// =============================================================================
-// ANALYTICS ENDPOINTS
-// =============================================================================
-
-app.post('/api/analytics/track', (req, res) => {
+// ====================
+// ENHANCED SERVER INITIALIZATION
+// ====================
+const initializeServer = async () => {
+  console.log('🚀 Initializing NBA Fantasy AI Backend...');
+  
   try {
-    const { userId, eventType, data } = req.body;
-    const event = AnalyticsService.trackEvent(userId, eventType, data);
-    res.json({ success: true, event });
+    // 1. FIRST connect to MongoDB
+    await connectDB();
+    console.log('✅ MongoDB connection established');
+    
+    // 2. Initialize WebSocket server (from File 1)
+    const wsServer = new WebSocketServer(httpServer);
+    app.locals.wsServer = wsServer;
+    console.log('✅ WebSocket server initialized');
+    
+    // 3. Wait a moment for connection to stabilize
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    // 4. THEN start the HTTP server
+    httpServer.listen(PORT, HOST, () => {
+      console.log('\n' + '='.repeat(60));
+      console.log('🎉 NBA Fantasy AI Backend Server Started Successfully!');
+      console.log('='.repeat(60));
+      console.log(`🌐 Local: http://localhost:${PORT}`);
+      console.log(`🌐 Network: http://10.0.0.183:${PORT}`);
+      console.log(`📊 Health Check: http://localhost:${PORT}/health`);
+      console.log(`📡 API Documentation: http://localhost:${PORT}/api`);
+      console.log(`🔌 WebSocket Server: ws://localhost:${PORT}`);
+      console.log(`⚡ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🕐 Started at: ${new Date().toISOString()}`);
+      console.log('='.repeat(60) + '\n');
+    });
+    
+    // 5. Handle server errors gracefully
+    httpServer.on('error', (error) => {
+      console.error('❌ HTTP Server error:', error);
+      if (error.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} is already in use. Try a different port.`);
+      }
+    });
+    
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Failed to initialize server:', error.message);
+    console.error('Full error:', error);
+    
+    // Don't exit immediately, let PM2 handle it
+    setTimeout(() => {
+      console.log('🔄 Attempting graceful shutdown...');
+      process.exit(1);
+    }, 5000);
   }
-});
+};
 
-app.get('/api/analytics/user/:userId', (req, res) => {
-  try {
-    const { userId } = req.params;
-    const analytics = AnalyticsService.getUserAnalytics(userId);
-    res.json(analytics);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// =============================================================================
-// DEBUG ENDPOINTS
-// =============================================================================
-
-app.get('/api/debug/test', (req, res) => {
-  console.log('🎯 DEBUG ENDPOINT HIT SUCCESSFULLY!');
-  res.json({
-    status: 'success',
-    message: 'Debug endpoint is working!',
-    timestamp: new Date().toISOString(),
-    server: 'NBA Fantasy AI Backend'
-  });
-});
-
-// =============================================================================
-// ERROR HANDLING MIDDLEWARE
-// =============================================================================
-
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
-  });
-});
-
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found'
-  });
-});
-
-// =============================================================================
-// SERVER INITIALIZATION
-// =============================================================================
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server is running on port ${PORT}`);
-  console.log(`🏀 NBA Fantasy AI Assistant v4.1 - Complete Consolidated Server!`);
-  console.log(`🔐 Authentication: JWT + MongoDB`);
-  console.log(`⭐ Route Modules: Integrated from routes/ directory`);
-  console.log(`📡 Real-time: WebSocket Live Updates`);
-  console.log(`🏀 Sports Scheduler: Integrated`);
-  console.log(`💰 Stripe integration: Active`);
-  console.log(`🔥 Firebase integration: Active`);
-  console.log(`📊 Analytics endpoints: Active`);
-  console.log(`🎯 Fantasy endpoints: Enhanced with team management`);
-  console.log(`🎲 Betting endpoints: AI-powered insights`);
-  console.log(`🤖 AI Prediction service: Active`);
-  console.log(`🌐 Domain: ${process.env.DOMAIN || 'http://localhost:3000'}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`✅ CRITICAL ENDPOINTS AVAILABLE:`);
-  console.log(`   • GET /api/nba/games/today`);
-  console.log(`   • GET /api/nba/fantasy/advice`);
-  console.log(`   • GET /api/nba/players/search`);
-  console.log(`   • GET /api/nba/player/:playerName`);
-});
-
-// =============================================================================
-// PROMO ROUTES (using enhanced version)
-// =============================================================================
-
-try {
-  const promoRoutes = require('./routes/promo/enhanced');
-  app.use('/api/promo', promoRoutes);
-  console.log('✅ Promo routes loaded (enhanced version)');
-} catch (error) {
-  console.error('❌ Failed to load promo routes:', error.message);
-  // Create a basic promo router as fallback
-  const promoRouter = express.Router();
-  promoRouter.get('/public', (req, res) => {
-    res.json({ success: true, message: 'Promo system is being enhanced' });
-  });
-  app.use('/api/promo', promoRouter);
-}
-
-// =============================================================================
-// INFLUENCER ROUTES
-// =============================================================================
-
-try {
-  const influencerRoutes = require('./routes/influencer');
-  app.use('/api/influencer', influencerRoutes);
-  console.log('✅ Influencer routes loaded');
-} catch (error) {
-  console.error('❌ Failed to load influencer routes:', error.message);
-}
-
-// =============================================================================
-// MONITORING ROUTES
-// =============================================================================
-
-app.get('/api/monitoring/health', (req, res) => {
-  res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    services: {
-      database: 'connected',
-      promo_system: 'enhanced',
-      influencer_system: 'active'
+// Graceful shutdown
+const shutdown = (signal) => {
+  console.log(`\n${signal} received. Shutting down gracefully...`);
+  
+  httpServer.close(() => {
+    console.log('HTTP server closed');
+    
+    if (redisClient) {
+      redisClient.quit();
+      console.log('Redis connection closed');
+    }
+    
+    if (mongoose.connection.readyState === 1) {
+      mongoose.connection.close(false, () => {
+        console.log('MongoDB connection closed');
+        process.exit(0);
+      });
+    } else {
+      process.exit(0);
     }
   });
+  
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+initializeServer().catch(error => {
+  console.error('Failed to initialize server:', error);
+  process.exit(1);
 });
+
+export default app;

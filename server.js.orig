@@ -1,0 +1,512 @@
+// server.js - Complete NBA Fantasy AI Backend Server
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import mongoose from 'mongoose';
+import Redis from 'ioredis';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import helmet from 'helmet';
+import compression from 'compression';
+import rateLimit from 'express-rate-limit';
+import fs from 'fs';
+import morgan from 'morgan';
+
+// ====================
+// LOAD ENVIRONMENT VARIABLES - SINGLE CALL
+// ====================
+dotenv.config();
+
+// ES module fix for __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Import route modules
+import nbaRoutes from './routes/nbaRoutes.js';
+import nhlRoutes from './routes/nhlRoutes.js';
+import nflRoutes from './routes/nflRoutes.js';
+import newsRoutes from './routes/newsRoutes.js';
+import fantasyRoutes from './routes/fantasyRoutes.js';
+import analyticsRoutes from './routes/analyticsRoutes.js';
+import authRoutes from './routes/authRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import revenuecatRoutes from './routes/revenuecatRoutes.js';
+import picksRouter from './routes/picks.js';
+import liveGamesRoutes from './routes/livegames.js';
+
+const app = express();
+const PORT = process.env.PORT || 3002;
+const HOST = process.env.HOST || '0.0.0.0';
+
+// ====================
+// MONGO DB CONNECTION - FIXED VERSION
+// ====================
+const connectDB = async () => {
+  try {
+    if (!process.env.MONGODB_URI) {
+      console.error('❌ MONGODB_URI not configured');
+      throw new Error('MONGODB_URI not configured');
+    }
+    
+    console.log('🔄 Connecting to MongoDB Atlas...');
+    console.log('📝 Using URI (masked):', process.env.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
+    
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      retryWrites: true,
+      w: 'majority'
+    });
+    
+    console.log('✅ Connected to MongoDB Atlas');
+    
+    // Set global connection status
+    global.isMongoConnected = true;
+    
+  } catch (error) {
+    console.error('❌ MongoDB connection failed:', error.message);
+    throw error;
+  }
+};
+
+// MongoDB connection event handlers
+mongoose.connection.on('connected', () => {
+  console.log('✅ MongoDB connection established');
+  global.isMongoConnected = true;
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err.message);
+  global.isMongoConnected = false;
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️  MongoDB disconnected');
+  global.isMongoConnected = false;
+});
+
+// ====================
+// WEBSOCKET SERVER IMPLEMENTATION
+// ====================
+class WebSocketServer {
+  constructor(server) {
+    this.io = new Server(server, {
+      cors: {
+        origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE']
+      }
+    });
+    this.clients = new Map();
+    this.setupEventHandlers();
+  }
+
+  setupEventHandlers() {
+    this.io.on('connection', (socket) => {
+      console.log(`✅ WebSocket client connected: ${socket.id}`);
+      
+      socket.on('register', (userId) => {
+        this.clients.set(userId, socket.id);
+        console.log(`📝 Client registered: ${userId} -> ${socket.id}`);
+      });
+
+      socket.on('disconnect', () => {
+        // Remove client from map
+        for (const [userId, socketId] of this.clients.entries()) {
+          if (socketId === socket.id) {
+            this.clients.delete(userId);
+            console.log(`❌ Client disconnected: ${userId}`);
+            break;
+          }
+        }
+      });
+    });
+  }
+
+  broadcastSecretPhraseEvent(event) {
+    console.log(`📢 Broadcasting secret phrase event: ${event.event || 'unknown'}`);
+    this.io.emit('secret-phrase-event', event);
+  }
+
+  sendToUser(userId, event, data) {
+    const socketId = this.clients.get(userId);
+    if (socketId) {
+      this.io.to(socketId).emit(event, data);
+      console.log(`📨 Sent ${event} to user: ${userId}`);
+    }
+  }
+
+  broadcastToAll(event, data) {
+    this.io.emit(event, data);
+  }
+
+  getConnectionCount() {
+    return this.io.engine.clientsCount || 0;
+  }
+}
+
+// ====================
+// SECURITY MIDDLEWARE
+// ====================
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https://assets.nhle.com"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+}));
+
+// Add logging middleware
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+
+// Enhanced CORS configuration
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://yourapp.com']
+    : [
+        'http://localhost:19006',
+        'exp://192.168.*.*:19000',
+        'https://pleasing-determination-production.up.railway.app',
+        'http://localhost:8081',
+        'http://localhost:19000',
+        'http://localhost:3001',
+        'exp://localhost:19000',
+        process.env.FRONTEND_URL,
+        'https://yourapp.yourdomain.com'
+      ].filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
+// Trust proxy & rate limiting
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+  
+  app.use('/api/', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    message: {
+      success: false,
+      error: 'Too many requests from this IP, please try again after 15 minutes'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+  }));
+} else {
+  app.use('/api/', rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 500,
+    message: {
+      success: false,
+      error: 'Too many requests from this IP'
+    },
+    skip: (req) => req.ip === '127.0.0.1' || req.ip === '::1'
+  }));
+}
+
+// Additional security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
+// Create HTTP server for WebSocket support
+const httpServer = createServer(app);
+
+// ====================
+// INITIALIZE REDIS CLIENT
+// ====================
+let redisClient;
+try {
+  if (process.env.REDIS_URL) {
+    redisClient = new Redis(process.env.REDIS_URL);
+    console.log('✅ Connected to Redis cache');
+  } else {
+    console.log('⚠️  Redis URL not configured, using in-memory cache');
+  }
+} catch (error) {
+  console.error('❌ Redis connection error:', error.message);
+}
+
+// ====================
+// HEALTH CHECK ENDPOINT - FIXED
+// ====================
+app.get('/health', async (req, res) => {
+  const mongoState = mongoose.connection.readyState;
+  const mongoStatus = mongoState === 1 ? 'connected' : 'disconnected';
+  
+  // Test MongoDB with simple query
+  let mongoTest = 'error';
+  try {
+    if (mongoose.connection.db) {
+      await mongoose.connection.db.admin().ping();
+      mongoTest = 'ok';
+    }
+  } catch (error) {
+    mongoTest = 'ping_failed: ' + error.message;
+  }
+  
+  const redisStatus = redisClient?.status === 'ready' ? 'connected' : 'disconnected';
+  
+  res.status(200).json({
+    status: 'healthy',
+    service: 'NBA Fantasy AI Backend',
+    version: '4.2.0',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    memory: process.memoryUsage(),
+    databases: {
+      mongodb: mongoStatus,
+      mongodb_state: mongoState, // 0=disconnected, 1=connected, 2=connecting, 3=disconnecting
+      mongoTest: mongoTest,
+      redis: redisStatus
+    },
+    process: {
+      pid: process.pid,
+      platform: process.platform,
+      node: process.version
+    }
+  });
+});
+
+// ====================
+// SECRET PHRASE ROUTES - FIXED VERSION
+// ====================
+const secretPhraseRouter = express.Router();
+
+secretPhraseRouter.get('/', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Secret phrases endpoint is working',
+    routes: ['GET /', 'POST /log-event', 'GET /analytics']
+  });
+});
+
+secretPhraseRouter.post('/log-event', async (req, res) => {
+  try {
+    console.log('🔵 [SECRET_PHRASE] Received request for user:', req.body.userId);
+    console.log('🔵 [SECRET_PHRASE] MongoDB readyState:', mongoose.connection.readyState);
+    console.log('🔵 [SECRET_PHRASE] Global isMongoConnected:', global.isMongoConnected);
+    
+    // Create event object
+    const event = {
+      _id: new mongoose.Types.ObjectId(),
+      userId: req.body.userId || 'anonymous',
+      phraseKey: req.body.phraseKey || 'unknown',
+      phraseCategory: req.body.phraseCategory || 'general',
+      eventType: req.body.eventType || 'discovery',
+      inputText: req.body.inputText || '',
+      sport: req.body.sport || 'NBA',
+      ...req.body,
+      timestamp: new Date()
+    };
+    
+    // ✅ Save to MongoDB
+    if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
+      try {
+        const db = mongoose.connection.db;
+        console.log('💾 [SECRET_PHRASE] Saving to MongoDB collections...');
+        
+        // Save to analyticsevents collection
+        await db.collection('analyticsevents').insertOne(event);
+        console.log('✅ Secret phrase saved to analyticsevents:', event._id.toString());
+        
+        // Also save to dedicated collection
+        await db.collection('secretphraseanalytics').insertOne({
+          ...event,
+          collectionName: 'secretphraseanalytics',
+          eventId: event._id.toString()
+        });
+        console.log('✅ Also saved to secretphraseanalytics collection');
+        
+      } catch (dbError) {
+        console.error('❌ Database save error:', dbError.message);
+      }
+    } else {
+      console.warn('⚠️  MongoDB not connected, skipping database save');
+    }
+    
+    res.status(201).json({ 
+      success: true, 
+      eventId: event._id.toString(),
+      message: 'Secret phrase logged successfully'
+    });
+  } catch (error) {
+    console.error('❌ Secret phrase route error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+secretPhraseRouter.get('/analytics', async (req, res) => {
+  try {
+    const analytics = {
+      totalEvents: 0,
+      todayEvents: 0,
+      topPhrases: [],
+      timestamp: new Date().toISOString()
+    };
+    
+    res.json({ success: true, analytics });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.use('/api/secret-phrases', secretPhraseRouter);
+
+// ====================
+// MOUNT OTHER ROUTES
+// ====================
+app.use('/api/games', liveGamesRoutes);
+app.use('/api/nhl', nhlRoutes);
+app.use('/api/nba', nbaRoutes);
+app.use('/api/nfl', nflRoutes);
+app.use('/api/news', newsRoutes);
+app.use('/api/fantasy', fantasyRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/revenuecat', revenuecatRoutes);
+app.use('/api/picks', picksRouter);
+
+// Basic route
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'NBA Dialogflow Webhook Server is running!',
+    status: 'OK',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// Webhook endpoint for Dialogflow
+app.post('/webhook', async (req, res) => {
+  console.log('Received webhook request:', req.body);
+  
+  try {
+    const intent = req.body.queryResult.intent.displayName;
+    const parameters = req.body.queryResult.parameters;
+    
+    let responseText = '';
+    
+    switch(intent) {
+      case 'GetTeamInfo':
+        const teamName = parameters.team;
+        responseText = `I would fetch info for the ${teamName}, but need to connect to NBA API first.`;
+        break;
+      default:
+        responseText = "I received your NBA request but haven't implemented this yet.";
+    }
+    
+    res.json({
+      fulfillmentText: responseText
+    });
+    
+  } catch (error) {
+    console.error('Error:', error);
+    res.json({
+      fulfillmentText: 'Sorry, I encountered an error processing your NBA request.'
+    });
+  }
+});
+
+// ====================
+// ENHANCED SERVER INITIALIZATION
+// ====================
+const initializeServer = async () => {
+  console.log('🚀 Initializing NBA Fantasy AI Backend...');
+  
+  try {
+    // 1. Connect to MongoDB
+    await connectDB();
+    console.log('✅ MongoDB connection established');
+    
+    // 2. Initialize WebSocket server
+    const wsServer = new WebSocketServer(httpServer);
+    app.locals.wsServer = wsServer;
+    console.log('✅ WebSocket server initialized');
+    
+    // 3. Start the HTTP server
+    httpServer.listen(PORT, HOST, () => {
+      console.log('\n' + '='.repeat(60));
+      console.log('🎉 NBA Fantasy AI Backend Server Started Successfully!');
+      console.log('='.repeat(60));
+      console.log(`🌐 Local: http://localhost:${PORT}`);
+      console.log(`🌐 Network: http://10.0.0.183:${PORT}`);
+      console.log(`📊 Health Check: http://localhost:${PORT}/health`);
+      console.log(`📡 API Documentation: http://localhost:${PORT}/api`);
+      console.log(`🔌 WebSocket Server: ws://localhost:${PORT}`);
+      console.log(`⚡ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🕐 Started at: ${new Date().toISOString()}`);
+      console.log('='.repeat(60) + '\n');
+    });
+    
+    // 4. Handle server errors gracefully
+    httpServer.on('error', (error) => {
+      console.error('❌ HTTP Server error:', error);
+      if (error.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} is already in use. Try a different port.`);
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to initialize server:', error.message);
+    console.error('Full error:', error);
+    
+    // Don't exit immediately, let PM2 handle it
+    setTimeout(() => {
+      console.log('🔄 Attempting graceful shutdown...');
+      process.exit(1);
+    }, 5000);
+  }
+};
+
+// Graceful shutdown
+const shutdown = (signal) => {
+  console.log(`\n${signal} received. Shutting down gracefully...`);
+  
+  httpServer.close(() => {
+    console.log('HTTP server closed');
+    
+    if (redisClient) {
+      redisClient.quit();
+      console.log('Redis connection closed');
+    }
+    
+    if (mongoose.connection.readyState === 1) {
+      mongoose.connection.close(false, () => {
+        console.log('MongoDB connection closed');
+        process.exit(0);
+      });
+    } else {
+      process.exit(0);
+    }
+  });
+  
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+initializeServer().catch(error => {
+  console.error('Failed to initialize server:', error);
+  process.exit(1);
+});
+
+export default app;

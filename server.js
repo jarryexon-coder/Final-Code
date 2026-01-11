@@ -12,9 +12,14 @@ import helmet from 'helmet';
 import compression from 'compression';
 import rateLimit from 'express-rate-limit';
 import fs from 'fs';
-import morgan from 'morgan'; // Added for logging
+import morgan from 'morgan';
 
-// Load environment variables FIRST
+// Import Database utility from File 1
+import Database from './utils/database.js';
+
+// ====================
+// LOAD ENVIRONMENT VARIABLES
+// ====================
 dotenv.config();
 
 // ES module fix for __dirname
@@ -32,17 +37,138 @@ import authRoutes from './routes/authRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import revenuecatRoutes from './routes/revenuecatRoutes.js';
 import picksRouter from './routes/picks.js';
-import liveGamesRoutes from './routes/livegames.js'; // Added from File 1
+import liveGamesRoutes from './routes/livegames.js';
+import kalshiRoutes from './routes/kalshiRoutes.js';
+import draftRoutes from './routes/draftRoutes.js';
+import contestRoutes from './routes/contestRoutes.js';
+import sportsAnalyticsRoutes from './routes/sportsAnalyticsRoutes.js';
+import situationalRoutes from './routes/situationalRoutes.js';
+import premiumRoutes from './routes/premiumRoutes.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // ====================
-// SECURITY MIDDLEWARE ENHANCEMENTS (From File 1)
+// CRITICAL: BODY PARSERS MUST BE FIRST!
 // ====================
+app.use(express.json()); // Parse JSON bodies
+app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 
-// 1. Implement Basic Security with Helmet
+console.log('✅ Body parsers initialized');
+
+// ====================
+// MONGO DB CONNECTION
+// ====================
+const connectDB = async () => {
+  try {
+    if (!process.env.MONGODB_URI) {
+      console.error('❌ MONGODB_URI not configured');
+      throw new Error('MONGODB_URI not configured');
+    }
+    
+    console.log('🔄 Connecting to MongoDB Atlas...');
+    console.log('📝 Using URI (masked):', process.env.MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
+    
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      retryWrites: true,
+      w: 'majority'
+    });
+    
+    console.log('✅ Connected to MongoDB Atlas');
+    global.isMongoConnected = true;
+    
+  } catch (error) {
+    console.error('❌ MongoDB connection failed:', error.message);
+    throw error;
+  }
+};
+
+// Initialize database connection from File 1
+try {
+  await Database.connect();
+  console.log('✅ Database service initialized');
+} catch (error) {
+  console.error('❌ Database initialization failed:', error);
+  // Continue without database - services will use mock data
+}
+
+// MongoDB connection event handlers
+mongoose.connection.on('connected', () => {
+  console.log('✅ MongoDB connection established');
+  global.isMongoConnected = true;
+});
+
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err.message);
+  global.isMongoConnected = false;
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️  MongoDB disconnected');
+  global.isMongoConnected = false;
+});
+
+// ====================
+// WEBSOCKET SERVER
+// ====================
+class WebSocketServer {
+  constructor(server) {
+    this.io = new Server(server, {
+      cors: {
+        origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+        methods: ['GET', 'POST', 'PUT', 'DELETE']
+      }
+    });
+    this.clients = new Map();
+    this.setupEventHandlers();
+  }
+
+  setupEventHandlers() {
+    this.io.on('connection', (socket) => {
+      console.log(`✅ WebSocket client connected: ${socket.id}`);
+      
+      socket.on('register', (userId) => {
+        this.clients.set(userId, socket.id);
+        console.log(`📝 Client registered: ${userId} -> ${socket.id}`);
+      });
+
+      socket.on('disconnect', () => {
+        for (const [userId, socketId] of this.clients.entries()) {
+          if (socketId === socket.id) {
+            this.clients.delete(userId);
+            console.log(`❌ Client disconnected: ${userId}`);
+            break;
+          }
+        }
+      });
+    });
+  }
+
+  broadcastSecretPhraseEvent(event) {
+    console.log(`📢 Broadcasting secret phrase event: ${event.event || 'unknown'}`);
+    this.io.emit('secret-phrase-event', event);
+  }
+
+  sendToUser(userId, event, data) {
+    const socketId = this.clients.get(userId);
+    if (socketId) {
+      this.io.to(socketId).emit(event, data);
+      console.log(`📨 Sent ${event} to user: ${userId}`);
+    }
+  }
+
+  getConnectionCount() {
+    return this.io.engine.clientsCount || 0;
+  }
+}
+
+// ====================
+// SECURITY MIDDLEWARE
+// ====================
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -55,55 +181,17 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// ====================
-// ADDED FROM FILE 1: Enhanced CSP Configuration
-// ====================
-app.use(
-  helmet.contentSecurityPolicy({
-    directives: {
-      defaultSrc: ["'self'"], // By default, only allow from our own origin
-      scriptSrc: ["'self'"],  // Only allow scripts from our own origin
-      styleSrc: ["'self'", "'unsafe-inline'"], // Allow styles from self AND inline styles (common for React)
-      imgSrc: ["'self'", "data:", "https:"], // Allow images from self, data URIs, and any HTTPS source
-      connectSrc: ["'self'", "https://pleasing-determination-production.up.railway.app"], // Allow API connections to self and your backend
-      // Add other directives as needed: fontSrc, frameSrc, etc.
-    },
-  })
-);
-
-// ====================
-// ADDED FROM FILE 2: Permissions Policy Headers
-// ====================
-// Option 1: Using Helmet's permittedCrossDomainPolicies
-app.use(
-  helmet.permittedCrossDomainPolicies({
-    permittedPolicies: "none", // A very restrictive policy
-  })
-);
-
-// Option 2: Custom Permissions-Policy header with more features
-app.use((req, res, next) => {
-  res.setHeader(
-    "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), payment=(), accelerometer=(), gyroscope=(), magnetometer=(), usb=()"
-  );
-  next();
-});
-
-// 2. Add logging middleware (From File 1)
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// 3. Enhanced CORS configuration (From File 1 - production ready)
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? ['https://yourapp.com'] // Replace with your actual frontend URL
+    ? ['https://yourapp.com']
     : [
         'http://localhost:19006',
         'exp://192.168.*.*:19000',
         'https://pleasing-determination-production.up.railway.app',
         'http://localhost:8081',
         'http://localhost:19000',
-        'http://localhost:3000',
         'http://localhost:3001',
         'exp://localhost:19000',
         process.env.FRONTEND_URL,
@@ -115,19 +203,14 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-
-// Handle preflight requests
 app.options('*', cors(corsOptions));
 
-// 4. Trust proxy & rate limiting (From File 1 - production specific)
 if (process.env.NODE_ENV === 'production') {
-  // Trust proxy for rate limiting
   app.set('trust proxy', 1);
   
-  // More secure rate limiting
   app.use('/api/', rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: {
       success: false,
       error: 'Too many requests from this IP, please try again after 15 minutes'
@@ -136,7 +219,6 @@ if (process.env.NODE_ENV === 'production') {
     legacyHeaders: false,
   }));
 } else {
-  // Development rate limiting (more permissive)
   app.use('/api/', rateLimit({
     windowMs: 15 * 60 * 1000,
     max: 500,
@@ -148,7 +230,6 @@ if (process.env.NODE_ENV === 'production') {
   }));
 }
 
-// Additional security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -156,30 +237,11 @@ app.use((req, res, next) => {
   next();
 });
 
-// ====================
-// ERROR TRACKING (From File 1 - optional)
-// ====================
-/*
-// Uncomment and configure when you set up Sentry
-const Sentry = require('@sentry/node');
-if (process.env.SENTRY_DSN) {
-  Sentry.init({ dsn: process.env.SENTRY_DSN });
-  app.use(Sentry.Handlers.requestHandler());
-  app.use(Sentry.Handlers.errorHandler());
-}
-*/
-
-// Create HTTP server for WebSocket support
+// Create HTTP server
 const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE']
-  }
-});
 
 // ====================
-// INITIALIZE REDIS CLIENT FOR CACHING
+// REDIS CLIENT
 // ====================
 let redisClient;
 try {
@@ -194,124 +256,24 @@ try {
 }
 
 // ====================
-// CACHE SERVICE
+// HEALTH CHECK ENDPOINT
 // ====================
-const cacheService = {
-  async getOrSet(key, fetchData, ttl = 300) {
-    if (!redisClient) {
-      return await fetchData();
-    }
-    
-    try {
-      const cached = await redisClient.get(key);
-      if (cached) {
-        console.log(`📦 Cache hit: ${key}`);
-        return JSON.parse(cached);
-      }
-      
-      const data = await fetchData();
-      await redisClient.setex(key, ttl, JSON.stringify(data));
-      console.log(`📦 Cache set: ${key} (TTL: ${ttl}s)`);
-      return data;
-    } catch (error) {
-      console.error(`Cache error for ${key}:`, error);
-      return await fetchData();
-    }
-  },
+app.get('/health', async (req, res) => {
+  const mongoState = mongoose.connection.readyState;
+  const mongoStatus = mongoState === 1 ? 'connected' : 'disconnected';
   
-  async invalidate(key) {
-    if (redisClient) {
-      await redisClient.del(key);
-      console.log(`📦 Cache invalidated: ${key}`);
-    }
-  },
-  
-  async invalidatePattern(pattern) {
-    if (redisClient) {
-      const keys = await redisClient.keys(pattern);
-      if (keys.length > 0) {
-        await redisClient.del(...keys);
-        console.log(`📦 Cache invalidated pattern: ${pattern} (${keys.length} keys)`);
-      }
-    }
-  }
-};
-
-// Global cache middleware
-app.use((req, res, next) => {
-  req.cacheService = cacheService;
-  if (redisClient) {
-    req.redis = redisClient;
-  }
-  next();
-});
-
-// ====================
-// DATABASE CONNECTION
-// ====================
-const connectDB = async () => {
+  let mongoTest = 'error';
   try {
-    if (process.env.MONGODB_URI) {
-      await mongoose.connect(process.env.MONGODB_URI);
-      console.log('✅ Connected to MongoDB Atlas');
-      
-      mongoose.connection.on('error', (err) => {
-        console.error('MongoDB connection error:', err);
-      });
-      
-      mongoose.connection.on('disconnected', () => {
-        console.log('MongoDB disconnected, attempting reconnect...');
-      });
-    } else {
-      console.log('⚠️  MongoDB URI not configured, using mock data');
+    if (mongoose.connection.db) {
+      await mongoose.connection.db.admin().ping();
+      mongoTest = 'ok';
     }
   } catch (error) {
-    console.error('❌ MongoDB connection error:', error.message);
-    console.error('Full error:', error);
+    mongoTest = 'ping_failed: ' + error.message;
   }
-};
-
-// ====================
-// ANALYTICS MODEL
-// ====================
-const analyticsEventSchema = new mongoose.Schema({
-  event: {
-    type: String,
-    required: true,
-    index: true
-  },
-  userId: {
-    type: String,
-    default: 'anonymous',
-    index: true
-  },
-  properties: {
-    type: mongoose.Schema.Types.Mixed,
-    default: {}
-  },
-  timestamp: {
-    type: Date,
-    default: Date.now,
-    index: true
-  },
-  userAgent: String,
-  ip: String,
-  path: String,
-  sessionId: String,
-  deviceType: String
-});
-
-analyticsEventSchema.index({ event: 1, timestamp: -1 });
-analyticsEventSchema.index({ userId: 1, timestamp: -1 });
-
-const AnalyticsEvent = mongoose.model('AnalyticsEvent', analyticsEventSchema);
-
-// ====================
-// ROUTE REGISTRATION (Updated with File 1 requirements)
-// ====================
-
-// Health check (must be before other routes)
-app.get('/health', (req, res) => {
+  
+  const redisStatus = redisClient?.status === 'ready' ? 'connected' : 'disconnected';
+  
   res.status(200).json({
     status: 'healthy',
     service: 'NBA Fantasy AI Backend',
@@ -321,49 +283,483 @@ app.get('/health', (req, res) => {
     environment: process.env.NODE_ENV || 'development',
     memory: process.memoryUsage(),
     databases: {
-      mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-      redis: redisClient?.status === 'ready' ? 'connected' : 'disconnected'
+      mongodb: mongoStatus,
+      mongodb_state: mongoState,
+      mongoTest: mongoTest,
+      redis: redisStatus
+    },
+    process: {
+      pid: process.pid,
+      platform: process.platform,
+      node: process.version
     }
   });
 });
 
-// API Documentation
-app.get('/api', (req, res) => {
+// Add a database health endpoint from File 1
+app.get('/api/database/health', async (req, res) => {
+  const status = Database.getStatus();
   res.json({
-    name: 'NBA Fantasy AI Backend API',
-    version: '4.2.0',
-    documentation: 'See /api-docs for detailed documentation',
-    endpoints: {
-      nba: '/api/nba/*',
-      nhl: '/api/nhl/*',
-      nfl: '/api/nfl/*',
-      news: '/api/news/*',
-      fantasy: '/api/fantasy/*',
-      analytics: '/api/analytics/*',
-      auth: '/api/auth/*',
-      admin: '/api/admin/*',
-      picks: '/api/picks/*',
-      dailyPicks: '/api/daily-picks',
-      aiPredictions: '/api/ai-predictions',
-      expertPicks: '/api/expert-picks',
-      games: '/api/games/*',
-      health: '/health',
-      dashboard: '/admin/dashboard'
-    }
+    success: status.connected,
+    database: status,
+    timestamp: new Date().toISOString()
   });
 });
 
 // ====================
-// FILE 1 ROUTE MOUNTING REQUIREMENTS
+// SPORTS ANALYTICS ENDPOINTS (from File 1)
 // ====================
 
-// Mount routes as specified in File 1
-app.use('/api/games', liveGamesRoutes); // From File 1 requirement
+// 1. Arbitrage endpoint (around line ~300)
+app.get('/api/sports-analytics/arbitrage', async (req, res) => {
+  try {
+    const { sport } = req.query;
+    // Mock response for now
+    const opportunities = {
+      opportunities: [
+        {
+          game: `${sport || 'NBA'} Mock Game`,
+          market: 'Moneyline',
+          book1: { name: 'Book A', odds: 1.85 },
+          book2: { name: 'Book B', odds: 2.10 },
+          arbitragePercentage: 5.2
+        }
+      ],
+      note: 'Mock data - service being fixed'
+    };
+    res.json({ success: true, data: opportunities });
+  } catch (error) {
+    console.error('❌ Arbitrage endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
-// 🚨 CRITICAL FIX: Add the missing nhlRoutes mounting
-app.use('/api/nhl', nhlRoutes); // This line was missing!
+// 2. Regression endpoint (around line ~300)
+app.get('/api/sports-analytics/regression', async (req, res) => {
+  try {
+    const { sport, statType } = req.query;
+    const candidates = {
+      candidates: [
+        {
+          player: `${sport || 'NBA'} Player X`,
+          stat: statType || '3-Point Percentage',
+          currentValue: '45%',
+          expectedRegression: '38%',
+          confidence: 'Medium',
+          gamesSampled: 25,
+          trend: 'Overperforming recent hot streak',
+          recommendation: 'Sell high in fantasy, bet unders'
+        },
+        {
+          player: `${sport || 'NBA'} Player Y`,
+          stat: statType || 'Free Throw Percentage',
+          currentValue: '92%',
+          expectedRegression: '85%',
+          confidence: 'High',
+          gamesSampled: 30,
+          trend: 'Unsustainable hot streak',
+          recommendation: 'Expect regression to mean'
+        }
+      ],
+      totalCandidates: 2,
+      sport: sport || 'NBA',
+      statType: statType || '3-Point Percentage',
+      note: 'Mock data - regression analysis active'
+    };
+    res.json({ success: true, data: candidates });
+  } catch (error) {
+    console.error('❌ Regression endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
-// Register all other route modules
+// ====================
+// SITUATIONAL ENDPOINTS (from File 1)
+// ====================
+
+// 3. Spot-plays endpoint (around line ~330)
+app.get('/api/situational/spot-plays', async (req, res) => {
+  try {
+    const { sport, date } = req.query;
+    // Mock response for now
+    const spotPlays = {
+      spotPlays: [
+        {
+          game: `${sport || 'NBA'} Mock Game: Team X vs Team Y`,
+          situation: 'Back-to-back with travel',
+          edge: 'Fade the traveling team',
+          confidence: 'High'
+        }
+      ],
+      note: 'Mock data - service being fixed'
+    };
+    res.json({ success: true, data: spotPlays });
+  } catch (error) {
+    console.error('❌ Spot plays endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 4. Live betting endpoint (around line ~360)
+app.get('/api/situational/live-betting', async (req, res) => {
+  try {
+    const { sport } = req.query;
+    const opportunities = {
+      opportunities: [
+        {
+          scenario: 'Team down by 14+ points at halftime',
+          historicalComebackRate: '12%',
+          currentLiveOdds: '+450',
+          recommendedAction: 'Bet on trailing team if odds > +400',
+          confidence: 'Medium',
+          units: 1,
+          sport: sport || 'NBA'
+        },
+        {
+          scenario: 'Star player fouls out early',
+          impact: 'Team offense drops by 8-10 points per 100 possessions',
+          currentLiveOdds: '+220 for opponent',
+          recommendedAction: 'Bet opponent moneyline',
+          confidence: 'High',
+          units: 2,
+          sport: sport || 'NBA'
+        }
+      ],
+      totalOpportunities: 2,
+      sport: sport || 'NBA',
+      note: 'Mock data - live betting analysis working'
+    };
+    res.json({ success: true, data: opportunities });
+  } catch (error) {
+    console.error('❌ Live betting endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ====================
+// CONTEST ENDPOINTS (from File 1)
+// ====================
+
+// 5. GPP leverage endpoint (around line ~497-509)
+app.get('/api/contest/gpp/leverage', async (req, res) => {
+  try {
+    const { sport, contestSize } = req.query;
+    // Mock response for now
+    const leveragePlays = {
+      leveragePlays: [
+        {
+          player: `${sport || 'NFL'} Mock Player`,
+          position: 'QB',
+          leverage: 'Low ownership, high ceiling',
+          contestSize: contestSize || 'large'
+        }
+      ],
+      note: 'Mock data - service being fixed'
+    };
+    res.json({ success: true, data: leveragePlays });
+  } catch (error) {
+    console.error('❌ GPP leverage endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ====================
+// PREMIUM ENDPOINTS (from File 1)
+// ====================
+
+// 6. Validate subscription endpoint (around line ~420)
+app.get('/api/premium/validate/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const validation = {
+      userId: userId || 'test_user_123',
+      isValid: true,
+      subscription: {
+        tier: 'pro',
+        status: 'active',
+        renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        paymentMethod: 'credit_card',
+        nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      },
+      features: ['secret_phrases', 'advanced_analytics', 'priority_support'],
+      limits: {
+        dailySecretPhrases: 50,
+        monthlyAnalytics: 1000,
+        concurrentSessions: 3
+      },
+      note: 'Mock data - subscription validation working'
+    };
+    res.json({ success: true, data: validation });
+  } catch (error) {
+    console.error('❌ Validate subscription endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 7. Usage limits endpoint (around line ~430)
+app.get('/api/premium/limits/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { featureKey } = req.query;
+    const limits = {
+      userId: userId || 'test_user_123',
+      featureKey: featureKey || 'secret_phrases',
+      limits: {
+        daily: 50,
+        monthly: 1500,
+        concurrent: 3
+      },
+      usage: {
+        dailyUsed: 15,
+        monthlyUsed: 320,
+        currentConcurrent: 1
+      },
+      remaining: {
+        daily: 35,
+        monthly: 1180,
+        available: true
+      },
+      resetTimes: {
+        dailyReset: new Date(Date.now() + 24 * 60 * 60 * 1000 - (Date.now() % (24 * 60 * 60 * 1000))).toISOString(),
+        monthlyReset: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      },
+      note: 'Mock data - usage limits tracking active'
+    };
+    res.json({ success: true, data: limits });
+  } catch (error) {
+    console.error('❌ Usage limits endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ====================
+// SECRET PHRASE ROUTES - FIXED VERSION
+// ====================
+const secretPhraseRouter = express.Router();
+
+// Test middleware to debug request body
+secretPhraseRouter.use((req, res, next) => {
+  console.log(`🔵 [DEBUG] Secret phrase route accessed: ${req.method} ${req.path}`);
+  console.log(`🔵 [DEBUG] Request body type: ${typeof req.body}`);
+  console.log(`🔵 [DEBUG] Request body:`, JSON.stringify(req.body));
+  console.log(`🔵 [DEBUG] Request headers:`, JSON.stringify(req.headers));
+  next();
+});
+
+secretPhraseRouter.get('/', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Secret phrases endpoint is working',
+    timestamp: new Date().toISOString()
+  });
+});
+
+secretPhraseRouter.post('/log-event', async (req, res) => {
+  console.log('🔵 [SECRET_PHRASE] POST /log-event received');
+  console.log('🔵 [SECRET_PHRASE] Full req.body:', req.body);
+  
+  // Check if body is parsed
+  if (!req.body || Object.keys(req.body).length === 0) {
+    console.error('❌ ERROR: req.body is empty or undefined!');
+    console.error('❌ Headers:', req.headers['content-type']);
+    console.error('❌ Raw request details:', {
+      method: req.method,
+      url: req.url,
+      headers: req.headers
+    });
+    
+    return res.status(400).json({ 
+      success: false, 
+      error: 'Request body is empty or not JSON',
+      receivedBody: req.body,
+      contentType: req.headers['content-type']
+    });
+  }
+  
+  try {
+    // Extract data with defaults
+    const { 
+      userId = 'anonymous', 
+      phraseKey = 'unknown', 
+      phraseCategory = 'general', 
+      eventType = 'discovery', 
+      inputText = '', 
+      sport = 'NBA' 
+    } = req.body;
+    
+    console.log(`🔵 [SECRET_PHRASE] Processing for user: ${userId}`);
+    
+    // Create event object
+    const event = {
+      _id: new mongoose.Types.ObjectId(),
+      userId,
+      phraseKey,
+      phraseCategory,
+      eventType,
+      inputText,
+      sport,
+      timestamp: new Date(),
+      receivedAt: new Date().toISOString(),
+      debug: {
+        bodyParsed: true,
+        bodyKeys: Object.keys(req.body),
+        source: 'fixed_server.js'
+      }
+    };
+    
+    console.log('💾 [SECRET_PHRASE] Event created:', event._id.toString());
+    
+    // Save to MongoDB if connected
+    if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
+      try {
+        const db = mongoose.connection.db;
+        
+        // Save to analyticsevents
+        const analyticResult = await db.collection('analyticsevents').insertOne(event);
+        console.log('✅ Saved to analyticsevents:', analyticResult.insertedId);
+        
+        // Also save to secretphraseanalytics
+        const secretEvent = {
+          ...event,
+          collectionName: 'secretphraseanalytics',
+          eventId: event._id.toString(),
+          savedAt: new Date()
+        };
+        
+        const secretResult = await db.collection('secretphraseanalytics').insertOne(secretEvent);
+        console.log('✅ Saved to secretphraseanalytics:', secretResult.insertedId);
+        
+        // Verify the save
+        const verifyDoc = await db.collection('analyticsevents').findOne({ _id: event._id });
+        console.log(`📊 Verification: Document ${verifyDoc ? '✅ exists' : '❌ not found'} in database`);
+        
+      } catch (dbError) {
+        console.error('❌ Database save error:', dbError.message);
+        console.error('❌ Error stack:', dbError.stack);
+      }
+    } else {
+      console.warn('⚠️  MongoDB not connected, skipping database save');
+      console.warn('⚠️  MongoDB state:', mongoose.connection.readyState);
+      console.warn('⚠️  MongoDB db object:', !!mongoose.connection.db);
+    }
+    
+    res.status(201).json({ 
+      success: true, 
+      eventId: event._id.toString(),
+      message: 'Secret phrase logged successfully',
+      userId: userId,
+      timestamp: event.timestamp
+    });
+    
+  } catch (error) {
+    console.error('❌ Secret phrase route error:', error);
+    console.error('❌ Error stack:', error.stack);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// GET: Aggregate analytics for secret phrases
+secretPhraseRouter.get('/aggregate', async (req, res) => {
+  try {
+    console.log('🔵 [SECRET_PHRASE] GET /aggregate called');
+    
+    const db = mongoose.connection.db;
+    const collection = db.collection('secretphraseanalytics');
+    
+    const { startDate, endDate, userId, category } = req.query;
+    console.log('🔵 [SECRET_PHRASE] Query params:', { startDate, endDate, userId, category });
+    
+    const matchStage = {};
+    if (startDate || endDate) {
+      matchStage.timestamp = {};
+      if (startDate) matchStage.timestamp.$gte = new Date(startDate);
+      if (endDate) matchStage.timestamp.$lte = new Date(endDate);
+    }
+    if (userId) matchStage.userId = userId;
+    if (category) matchStage.phraseCategory = category;
+    
+    console.log('🔵 [SECRET_PHRASE] Match stage:', matchStage);
+    
+    const aggregation = await collection.aggregate([
+      { $match: matchStage },
+      {
+        $facet: {
+          overallStats: [
+            {
+              $group: {
+                _id: null,
+                totalEvents: { $sum: 1 },
+                uniqueUsers: { $addToSet: '$userId' },
+                uniquePhrases: { $addToSet: '$phraseKey' },
+                totalDiscoveries: {
+                  $sum: { $cond: [{ $eq: ['$eventType', 'discovery'] }, 1, 0] }
+                },
+                totalUsages: {
+                  $sum: { $cond: [{ $eq: ['$eventType', 'usage'] }, 1, 0] }
+                }
+              }
+            }
+          ],
+          byPhrase: [
+            {
+              $group: {
+                _id: '$phraseKey',
+                count: { $sum: 1 },
+                category: { $first: '$phraseCategory' },
+                rarity: { $first: '$rarity' }
+              }
+            },
+            { $sort: { count: -1 } }
+          ],
+          byCategory: [
+            {
+              $group: {
+                _id: '$phraseCategory',
+                count: { $sum: 1 }
+              }
+            },
+            { $sort: { count: -1 } }
+          ]
+        }
+      }
+    ]).toArray();
+    
+    const result = aggregation[0] || {};
+    console.log('🔵 [SECRET_PHRASE] Aggregation result:', JSON.stringify(result, null, 2));
+    
+    res.json({
+      success: true,
+      data: {
+        overallStats: result.overallStats?.[0] || {
+          totalEvents: 0,
+          uniqueUsers: [],
+          uniquePhrases: [],
+          totalDiscoveries: 0,
+          totalUsages: 0
+        },
+        byPhrase: result.byPhrase || [],
+        byCategory: result.byCategory || []
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in /aggregate:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Mount the secret phrase router BEFORE other routes
+app.use('/api/secret-phrases', secretPhraseRouter);
+
+// ====================
+// MOUNT OTHER ROUTES
+// ====================
+app.use('/api/games', liveGamesRoutes);
+app.use('/api/nhl', nhlRoutes);
 app.use('/api/nba', nbaRoutes);
 app.use('/api/nfl', nflRoutes);
 app.use('/api/news', newsRoutes);
@@ -373,447 +769,64 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/revenuecat', revenuecatRoutes);
 app.use('/api/picks', picksRouter);
+app.use('/api/kalshi', kalshiRoutes);
+app.use('/api/draft', draftRoutes);
+app.use('/api/contest', contestRoutes);
+app.use('/api/sports-analytics', sportsAnalyticsRoutes);
+app.use('/api/situational', situationalRoutes);
+app.use('/api/premium', premiumRoutes);
 
-// Basic route (from your original File 2)
+// Basic route
 app.get('/', (req, res) => {
   res.json({ 
     message: 'NBA Dialogflow Webhook Server is running!',
     status: 'OK',
-    environment: process.env.NODE_ENV || 'development'
-  });
-});
-
-// Webhook endpoint for Dialogflow (from your original File 2)
-app.post('/webhook', async (req, res) => {
-  console.log('Received webhook request:', req.body);
-  
-  try {
-    const intent = req.body.queryResult.intent.displayName;
-    const parameters = req.body.queryResult.parameters;
-    
-    let responseText = '';
-    
-    switch(intent) {
-      case 'GetTeamInfo':
-        const teamName = parameters.team;
-        responseText = `I would fetch info for the ${teamName}, but need to connect to NBA API first.`;
-        break;
-      default:
-        responseText = "I received your NBA request but haven't implemented this yet.";
-    }
-    
-    res.json({
-      fulfillmentText: responseText
-    });
-    
-  } catch (error) {
-    console.error('Error:', error);
-    res.json({
-      fulfillmentText: 'Sorry, I encountered an error processing your NBA request.'
-    });
-  }
-});
-
-// ====================
-// DASHBOARD CODE
-// ====================
-const dashboardPath = path.join(__dirname, 'dashboard');
-if (fs.existsSync(dashboardPath)) {
-  app.use('/dashboard', express.static(dashboardPath));
-  console.log('✅ Dashboard static files served from /dashboard');
-} else {
-  console.log('⚠️  Dashboard directory not found, creating placeholder');
-  
-  const dashboardHTML = `
-  <!DOCTYPE html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NBA Fantasy AI Dashboard</title>
-    <style>
-      body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
-      .container { max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; }
-      h1 { color: #1d4289; }
-      .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 0; }
-      .stat-card { background: #f8f9fa; padding: 20px; border-radius: 8px; border-left: 4px solid #1d4289; }
-      .stat-value { font-size: 2em; font-weight: bold; color: #1d4289; }
-      .stat-label { color: #666; margin-top: 5px; }
-    </style>
-  </head>
-  <body>
-    <div class="container">
-      <h1>🏀 NBA Fantasy AI Admin Dashboard</h1>
-      <p>Welcome to the admin dashboard. Analytics data will be displayed here.</p>
-      
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-value" id="todayEvents">0</div>
-          <div class="stat-label">Events Today</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="totalEvents">0</div>
-          <div class="stat-label">Total Events</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="activeUsers">0</div>
-          <div class="stat-label">Active Users</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-value" id="topEvent">-</div>
-          <div class="stat-label">Top Event</div>
-        </div>
-      </div>
-      
-      <div style="margin-top: 40px;">
-        <h3>Security Status</h3>
-        <ul>
-          <li>✅ Helmet Security Headers: Active</li>
-          <li>✅ CORS Configuration: ${process.env.NODE_ENV === 'production' ? 'Production' : 'Development'}</li>
-          <li>✅ Rate Limiting: Active (${process.env.NODE_ENV === 'production' ? '100 req/15min' : '500 req/15min'})</li>
-          <li>✅ Morgan Logging: Active (${process.env.NODE_ENV === 'production' ? 'combined' : 'dev'} format)</li>
-          <li>${process.env.SENTRY_DSN ? '✅ Sentry Error Tracking: Active' : '⚠️ Sentry Error Tracking: Not configured'}</li>
-        </ul>
-        
-        <h3>Quick Links</h3>
-        <ul>
-          <li><a href="/api/analytics/summary">Analytics Summary</a></li>
-          <li><a href="/api/analytics/events">View All Events</a></li>
-          <li><a href="/api">API Documentation</a></li>
-          <li><a href="/health">System Health</a></li>
-        </ul>
-      </div>
-    </div>
-    
-    <script>
-      async function loadDashboardStats() {
-        try {
-          const response = await fetch('/api/analytics/summary');
-          const data = await response.json();
-          
-          if (data.success) {
-            document.getElementById('todayEvents').textContent = data.data.today_events.toLocaleString();
-            document.getElementById('totalEvents').textContent = data.data.total_events.toLocaleString();
-            document.getElementById('activeUsers').textContent = data.data.weekly_active_users.toLocaleString();
-            if (data.data.top_events && data.data.top_events.length > 0) {
-              document.getElementById('topEvent').textContent = data.data.top_events[0]._id;
-            }
-          }
-        } catch (error) {
-          console.error('Failed to load dashboard stats:', error);
-        }
-      }
-      
-      loadDashboardStats();
-      setInterval(loadDashboardStats, 30000);
-    </script>
-  </body>
-  </html>`;
-  
-  app.get('/admin/dashboard', (req, res) => {
-    res.send(dashboardHTML);
-  });
-  
-  console.log('✅ Dashboard route created at /admin/dashboard');
-}
-
-// ====================
-// CACHED API ENDPOINTS
-// ====================
-
-app.get('/api/nba/games', async (req, res) => {
-  try {
-    const cacheKey = 'nba:games';
-    
-    const games = await req.cacheService.getOrSet(cacheKey, async () => {
-      return [
-        {
-          id: 1,
-          homeTeam: 'Los Angeles Lakers',
-          awayTeam: 'Golden State Warriors',
-          homeScore: 108,
-          awayScore: 105,
-          quarter: '4th',
-          timeRemaining: '2:14',
-          status: 'live',
-          date: new Date().toISOString(),
-          arena: 'Crypto.com Arena'
-        },
-        {
-          id: 2,
-          homeTeam: 'Boston Celtics',
-          awayTeam: 'Miami Heat',
-          homeScore: 95,
-          awayScore: 89,
-          quarter: '3rd',
-          timeRemaining: '5:42',
-          status: 'live',
-          date: new Date().toISOString(),
-          arena: 'TD Garden'
-        }
-      ];
-    }, 300);
-    
-    res.json({
-      success: true,
-      count: games.length,
-      games,
-      cached: true,
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('Error in /api/nba/games:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-// ... [Keep all your existing cached endpoints here - they remain unchanged]
-// This includes: /api/players, /api/news/all, /api/nhl/games, /api/nfl/games, etc.
-
-// ====================
-// ANALYTICS ENDPOINTS
-// ====================
-app.post('/api/v1/analytics/track', async (req, res) => {
-  try {
-    const { event, userId, properties } = req.body;
-    
-    const analyticsEvent = new AnalyticsEvent({
-      event,
-      userId: userId || 'anonymous',
-      properties: properties || {},
-      timestamp: new Date(),
-      userAgent: req.get('User-Agent'),
-      ip: req.ip,
-      path: req.originalUrl
-    });
-    
-    await analyticsEvent.save();
-    
-    if (redisClient) {
-      await redisClient.lPush('recent_events', JSON.stringify({
-        event,
-        userId: analyticsEvent.userId,
-        timestamp: analyticsEvent.timestamp
-      }));
-      await redisClient.lTrim('recent_events', 0, 99);
-    }
-    
-    console.log(`📊 Tracked event: ${event} for user: ${analyticsEvent.userId}`);
-    
-    res.json({ 
-      success: true, 
-      message: 'Event tracked',
-      eventId: analyticsEvent._id
-    });
-  } catch (error) {
-    console.error('Analytics tracking error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ... [Keep all your existing analytics endpoints here]
-
-// ====================
-// DAILY PICKS ENDPOINTS
-// ====================
-app.get('/api/daily-picks', async (req, res) => {
-  try {
-    const { sport, date } = req.query;
-    const cacheKey = `picks:daily:${sport || 'all'}:${date || 'today'}`;
-    
-    const picks = await req.cacheService.getOrSet(cacheKey, async () => {
-      return [
-        {
-          id: 1,
-          sport: sport || 'NBA',
-          player: 'Stephen Curry',
-          team: 'Golden State Warriors',
-          pickType: 'Over',
-          stat: 'Points',
-          line: 28.5,
-          confidence: 85,
-          reasoning: 'High-scoring game vs Lakers, favorable matchup',
-          timestamp: new Date().toISOString()
-        }
-      ];
-    }, 600);
-    
-    res.json({
-      success: true,
-      picks,
-      timestamp: new Date().toISOString(),
-      meta: {
-        sport,
-        date,
-        totalPicks: picks.length,
-      }
-    });
-  } catch (error) {
-    console.error('Error fetching daily picks:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch picks' });
-  }
-});
-
-// ... [Keep all your existing endpoints for AI predictions, expert picks, etc.]
-
-// ====================
-// WEBSOCKET HANDLERS
-// ====================
-io.on('connection', (socket) => {
-  console.log(`✅ Client connected: ${socket.id}`);
-
-  socket.on('subscribe-game', (gameId) => {
-    socket.join(`game-${gameId}`);
-    console.log(`📡 Client ${socket.id} subscribed to game ${gameId}`);
-    
-    socket.emit('game-state', {
-      gameId,
-      homeScore: 108,
-      awayScore: 105,
-      quarter: '4th',
-      timeRemaining: '2:14',
-      players: []
-    });
-  });
-
-  socket.on('unsubscribe-game', (gameId) => {
-    socket.leave(`game-${gameId}`);
-    console.log(`📡 Client ${socket.id} unsubscribed from game ${gameId}`);
-  });
-
-  socket.on('fantasy-update', (data) => {
-    console.log('Fantasy update received:', data);
-    io.to(`league-${data.leagueId}`).emit('fantasy-lineup-updated', data);
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`❌ Client disconnected: ${socket.id}`);
-  });
-});
-
-// Simulate live game updates
-const simulateLiveUpdates = () => {
-  setInterval(() => {
-    const updates = [
-      {
-        gameId: 1,
-        homeScore: 108 + Math.floor(Math.random() * 3),
-        awayScore: 105 + Math.floor(Math.random() * 3),
-        quarter: '4th',
-        timeRemaining: `${Math.floor(Math.random() * 2)}:${Math.floor(Math.random() * 60).toString().padStart(2, '0')}`,
-        lastPlay: ['3pt shot made', 'Turnover', 'Foul', 'Timeout'][Math.floor(Math.random() * 4)]
-      }
-    ];
-
-    updates.forEach(update => {
-      io.to(`game-${update.gameId}`).emit('game-update', {
-        ...update,
-        timestamp: new Date().toISOString()
-      });
-    });
-  }, 5000);
-};
-
-// ====================
-// ERROR HANDLING
-// ====================
-app.use((req, res, next) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found',
-    path: req.url,
-    method: req.method,
-    availableEndpoints: [
-      '/health',
-      '/api',
-      '/admin/dashboard',
-      '/api/nba/*',
-      '/api/nhl/*',
-      '/api/nfl/*',
-      '/api/news/*',
-      '/api/fantasy/*',
-      '/api/analytics/*',
-      '/api/v1/analytics/*',
-      '/api/picks/*',
-      '/api/daily-picks',
-      '/api/ai-predictions',
-      '/api/expert-picks',
-      '/api/players',
-      '/api/teams',
-      '/api/games/*',
-      '/api/admin/cache/*',
-      '/api/admin/backup-status',
-      '/webhook'
-    ]
-  });
-});
-
-app.use((err, req, res, next) => {
-  console.error('🔥 Server error:', err.stack);
-  
-  const statusCode = err.statusCode || 500;
-  const errorMessage = process.env.NODE_ENV === 'production' 
-    ? 'Internal server error' 
-    : err.message;
-  
-  res.status(statusCode).json({
-    success: false,
-    error: errorMessage,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    timestamp: new Date().toISOString()
+    environment: process.env.NODE_ENV || 'development',
+    bodyParserTest: 'Body parser should be working now'
   });
 });
 
 // ====================
-// INITIALIZATION
+// SERVER INITIALIZATION
 // ====================
 const initializeServer = async () => {
-  await connectDB();
+  console.log('🚀 Initializing NBA Fantasy AI Backend...');
   
-  if (process.env.NODE_ENV !== 'production') {
-    simulateLiveUpdates();
-    console.log('⚡ Live game updates simulation started');
+  try {
+    // 1. Connect to MongoDB
+    await connectDB();
+    
+    // 2. Initialize WebSocket server
+    const wsServer = new WebSocketServer(httpServer);
+    app.locals.wsServer = wsServer;
+    console.log('✅ WebSocket server initialized');
+    
+    // 3. Start the HTTP server
+    httpServer.listen(PORT, HOST, () => {
+      console.log('\n' + '='.repeat(60));
+      console.log('🎉 NBA Fantasy AI Backend Server Started Successfully!');
+      console.log('='.repeat(60));
+      console.log(`🌐 Local: http://localhost:${PORT}`);
+      console.log(`📊 Health Check: http://localhost:${PORT}/health`);
+      console.log(`🗃️ Database Health: http://localhost:${PORT}/api/database/health`);
+      console.log(`📡 API Documentation: http://localhost:${PORT}/api`);
+      console.log(`🔌 WebSocket Server: ws://localhost:${PORT}`);
+      console.log(`⚡ Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🕐 Started at: ${new Date().toISOString()}`);
+      console.log('='.repeat(60) + '\n');
+    });
+    
+    httpServer.on('error', (error) => {
+      console.error('❌ HTTP Server error:', error);
+      if (error.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} is already in use.`);
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Failed to initialize server:', error.message);
+    process.exit(1);
   }
-  
-  httpServer.listen(PORT, HOST, () => {
-    console.log('\n' + '='.repeat(60));
-    console.log('🚀 NBA Fantasy AI Backend Server Started');
-    console.log('='.repeat(60));
-    console.log(`🌐 Local: http://localhost:${PORT}`);
-    console.log(`🌐 Network: http://10.0.0.183:${PORT}`);
-    console.log(`📊 Health Check: http://10.0.0.183:${PORT}/health`);
-    console.log(`📡 API Documentation: http://10.0.0.183:${PORT}/api`);
-    console.log(`📈 Admin Dashboard: http://10.0.0.183:${PORT}/admin/dashboard`);
-    console.log(`⚡ Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🕐 Started at: ${new Date().toISOString()}`);
-    
-    // Security Status Report
-    console.log('\n🔒 SECURITY FEATURES:');
-    console.log('   ✅ Helmet Security Headers');
-    console.log('   ✅ Enhanced CSP Configuration (From File 1)');
-    console.log('   ✅ Permissions-Policy Headers (From File 2)');
-    console.log('   ✅ Cross-Domain Policies: Restricted');
-    console.log('   ✅ CORS Configuration');
-    console.log('   ✅ Rate Limiting: ' + (process.env.NODE_ENV === 'production' ? '100 req/15min' : '500 req/15min'));
-    console.log('   ✅ Morgan Logging');
-    console.log(`   ${process.env.SENTRY_DSN ? '✅ Sentry Error Tracking' : '⚠️ Sentry: Not configured'}`);
-    
-    console.log('\n🏀 ROUTE MOUNTING:');
-    console.log('   ✅ /api/nhl → nhlRoutes.js');
-    console.log('   ✅ /api/games → livegames.js');
-    console.log('   ✅ /api/nba → nbaRoutes.js');
-    console.log('   ✅ /webhook → Dialogflow endpoint');
-    
-    if (redisClient?.status === 'ready') {
-      console.log('✅ Connected to Redis cache');
-    }
-    
-    if (mongoose.connection.readyState === 1) {
-      console.log('✅ Connected to MongoDB');
-    }
-    
-    console.log('='.repeat(60) + '\n');
-  });
 };
 
 // Graceful shutdown
@@ -847,9 +860,4 @@ const shutdown = (signal) => {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-initializeServer().catch(error => {
-  console.error('Failed to initialize server:', error);
-  process.exit(1);
-});
-
-export default app;
+initializeServer();

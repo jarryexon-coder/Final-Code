@@ -1,0 +1,84 @@
+--- server.js
++++ server.js
+@@ -195,8 +195,18 @@
+ // FIXED: Removed duplicate route handler for '/log-event'
+ secretPhraseRouter.post('/log-event', async (req, res) => {
+   try {
++    console.log('🔵 [SECRET_PHRASE] Received request for user:', req.body.userId);
++    console.log('🔵 [SECRET_PHRASE] MongoDB readyState:', mongoose.connection.readyState);
++    console.log('🔵 [SECRET_PHRASE] Global isMongoConnected:', global.isMongoConnected);
++    
+     // For now, simulate event creation
+     const event = {
++      _id: new mongoose.Types.ObjectId(),
++      userId: req.body.userId || 'anonymous',
++      phraseKey: req.body.phraseKey || 'unknown',
++      phraseCategory: req.body.phraseCategory || 'general',
++      eventType: req.body.eventType || 'discovery',
++      inputText: req.body.inputText || '',
++      sport: req.body.sport || 'NBA',
+       ...req.body,
+-      _id: new mongoose.Types.ObjectId(),
+       timestamp: new Date()
+@@ -205,10 +215,6 @@
+     
+         // 🎯 DIAGNOSTIC LOGGING ADDED
+-        console.log('🔵 [DIAG] Route called for user:', req.body.userId);
+-        console.log('🔵 [DIAG] MongoDB readyState:', mongoose.connection.readyState);
+-        console.log('🔵 [DIAG] MongoDB db object exists:', !!mongoose.connection.db);
+-        // ✅ ADDED: Save to MongoDB
+     try {
+       
+     // ✅ Check MongoDB connection before saving
+@@ -217,7 +223,7 @@
+     } else {
+       try {
+         const db = mongoose.connection.db;
+-        console.log('💾 Saving secret phrase to MongoDB...');
++        console.log('💾 [SECRET_PHRASE] Saving to MongoDB collections...');
+         
+         // Save to analyticsevents collection
+         await db.collection('analyticsevents').insertOne(event);
+@@ -226,6 +232,7 @@
+         // Also save to dedicated collection
+         await db.collection('secretphraseanalytics').insertOne({
+           ...event,
++          collectionName: 'secretphraseanalytics',
+           eventId: event._id.toString()
+         });
+         console.log('✅ Also saved to secretphraseanalytics collection');
+@@ -234,32 +241,6 @@
+         console.error('❌ Database save error:', dbError.message);
+       }
+     }
+-    const db = mongoose.connection.db;
+-      await db.collection('analyticsevents').insertOne(event);
+-      console.log('✅ Secret phrase saved to analyticsevents:', event._id.toString());
+-      await db.collection('secretphraseanalytics').insertOne({
+-        ...event,
+-        eventId: event._id.toString()
+-      });
+-      console.log('✅ Also saved to secretphraseanalytics collection');
+-    } catch (dbError) {
+-      console.error('❌ Database save error (but continuing):', dbError.message);
+-    }
+-    
+-    // ✅ ADD THIS CODE TO SAVE TO MONGODB:
+-    try {
+-      // Save to the 'analyticsevents' collection (which already exists)
+-      const db = mongoose.connection.db;
+-      const result = await db.collection('analyticsevents').insertOne(event);
+-      console.log('✅ Secret phrase saved to MongoDB:', event._id.toString());
+-      
+-      // Also save to a dedicated collection for easier querying
+-      await db.collection('secretphraseanalytics').insertOne({
+-        ...event,
+-        eventId: event._id.toString(),
+-        savedAt: new Date()
+-      });
+-      
+-    } catch (dbError) {
+-      console.error('❌ Database save error (continuing anyway):', dbError.message);
+-    }
+     
+     // Broadcast via WebSocket
