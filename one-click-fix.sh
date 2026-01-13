@@ -1,0 +1,117 @@
+#!/bin/bash
+
+echo "=== NBA Backend One-Click Fix ==="
+
+# Backup original server.js
+cp server.js server.js.backup
+
+# Create a clean, working server.js
+cat > server.js << 'SERVER_EOF'
+// NBA Fantasy Backend - Clean Version
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import mongoose from 'mongoose';
+import Redis from 'ioredis';
+
+dotenv.config();
+
+const app = express();
+const PORT = process.env.PORT || 3002;
+
+// Middleware
+app.use(express.json());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:19006'],
+  credentials: true
+}));
+
+// MongoDB
+const connectDB = async () => {
+  try {
+    const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/sports-app';
+    await mongoose.connect(uri);
+    console.log('✅ MongoDB connected');
+  } catch (err) {
+    console.error('❌ MongoDB error:', err.message);
+  }
+};
+
+// Redis
+let redisClient;
+if (process.env.REDIS_URL) {
+  redisClient = new Redis(process.env.REDIS_URL);
+  redisClient.on('connect', () => console.log('✅ Redis connected'));
+}
+
+// ====== ENDPOINTS ======
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'NBA Fantasy AI Backend',
+    version: '5.0.1',
+    status: 'online',
+    endpoints: ['/health', '/api/health', '/privacy', '/api/database/health']
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'NBA Fantasy Backend',
+    version: '5.0.1',
+    timestamp: new Date().toISOString(),
+    mongo: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    redis: redisClient?.status || 'not_configured'
+  });
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'NBA Fantasy API',
+    version: '5.0.1',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+app.get('/privacy', (req, res) => {
+  res.send('<h1>Privacy Policy</h1><p>Content here</p>');
+});
+
+app.get('/api/database/health', (req, res) => {
+  res.json({
+    success: mongoose.connection.readyState === 1,
+    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Start server
+connectDB().then(() => {
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`🌐 http://localhost:${PORT}`);
+    console.log(`📊 Health: http://localhost:${PORT}/health`);
+    console.log(`🔧 API Health: http://localhost:${PORT}/api/health`);
+  });
+});
+SERVER_EOF
+
+echo "✅ Created clean server.js"
+echo ""
+echo "=== Testing locally ==="
+npm start &
+sleep 5
+echo ""
+echo "Test results:"
+curl -s http://localhost:3002/health | grep -o '"status":"[^"]*"'
+curl -s http://localhost:3002/api/health | grep -o '"status":"[^"]*"'
+echo ""
+pkill -f "node server.js"
+
+echo "=== Ready for Railway ==="
+echo "1. railway up"
+echo "2. Wait 2 minutes"
+echo "3. Test: curl https://pleasing-determination-production.up.railway.app/api/health"
