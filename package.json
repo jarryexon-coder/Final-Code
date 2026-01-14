@@ -5,7 +5,7 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "start": "PORT=3002 node server.js",
     "dev": "nodemon server.js",
     "server": "node server.js",
     "test": "curl http://localhost:3000/health",
