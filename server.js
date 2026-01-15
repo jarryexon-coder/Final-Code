@@ -375,11 +375,20 @@ app.get('/api/health', async (req, res) => {
 // Add a database health endpoint from File 1
 app.get('/api/database/health', async (req, res) => {
   const status = Database.getStatus();
-  res.json({
-    success: status.connected,
-    database: status,
-    timestamp: new Date().toISOString()
-  });
+    success: true,
+  config: { // <-- Remove this outer "config" wrapper
+    features: { liveGames: true, userProfiles: true },
+    apiUrl: process.env.RAILWAY_PUBLIC_FRONTEND_URL || process.env.API_BASE_URL || 'https://pleasing-determination-production.up.railway.app',
+    uiVersion: '1.0.0'
+  },
+  timestamp: new Date().toISOString()
+res.json({
+  success: true,
+  // Move config properties to the root
+  features: { liveGames: true, userProfiles: true },
+  apiUrl: process.env.RAILWAY_PUBLIC_FRONTEND_URL || process.env.API_BASE_URL || 'https://pleasing-determination-production.up.railway.app',
+  uiVersion: '1.0.0',
+  timestamp: new Date().toISOString()
 });
 
 // ====================
