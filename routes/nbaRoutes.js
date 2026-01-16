@@ -90,4 +90,32 @@ router.get('/db-status', async (req, res) => {
   }
 });
 
+// Get game summary
+router.get('/gameSummary', async (req, res) => {
+  try {
+    const { gameId } = req.query;
+    
+    // Simple stub - returns mock data
+    res.json({
+      success: true,
+      summary: {
+        gameId: gameId || 'mock_game_001',
+        homeTeam: 'Home Team',
+        awayTeam: 'Away Team',
+        status: 'scheduled',
+        startTime: new Date().toISOString(),
+        venue: 'Stadium Name',
+        // Add other fields as needed by your frontend
+      },
+      message: 'Stub endpoint - replace with real API'
+    });
+  } catch (error) {
+    console.error('Error in gameSummary route:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error'
+    });
+  }
+});
+
 export default router;

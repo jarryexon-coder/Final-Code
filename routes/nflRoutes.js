@@ -21,4 +21,20 @@ router.get('/stats', (req, res) => {
   });
 });
 
+router.get('/gameSummary', async (req, res) => {
+  const { gameId } = req.query;
+  
+  res.json({
+    success: true,
+    summary: {
+      gameId: gameId || 'mock_nfl_game_001',
+      homeTeam: 'NFL Home Team',
+      awayTeam: 'NFL Away Team',
+      status: 'scheduled',
+      // NFL-specific fields
+    },
+    message: 'Stub endpoint'
+  });
+});
+
 export default router;

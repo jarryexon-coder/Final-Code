@@ -375,5 +375,67 @@ router.get('/players', async (req, res) => {
   }
 });
 
+// NHL Game Summary endpoint
+router.get('/gameSummary', async (req, res) => {
+  const { gameId } = req.query;
+  
+  res.json({
+    success: true,
+    summary: {
+      gameId: gameId || 'mock_nhl_game_001',
+      homeTeam: 'NHL Home Team',
+      awayTeam: 'NHL Away Team',
+      status: 'scheduled',
+    },
+    message: 'Stub endpoint'
+  });
+});
+
+// NHL Schedule endpoint
+router.get('/schedule', async (req, res) => {
+  // Return mock schedule for next 7 days
+  const schedule = [];
+  const today = new Date();
+  
+  for (let i = 0; i < 7; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() + i);
+    schedule.push({
+      date: date.toISOString().split('T')[0],
+      games: [
+        {
+          id: `mock_nhl_${i}`,
+          homeTeam: 'Team A',
+          awayTeam: 'Team B',
+          time: '19:00 ET'
+        }
+      ]
+    });
+  }
+  
+  res.json({
+    success: true,
+    schedule: schedule,
+    message: 'Stub schedule endpoint'
+  });
+});
+
+// NHL Scoreboard endpoint
+router.get('/scoreboard', async (req, res) => {
+  res.json({
+    success: true,
+    scoreboard: [
+      {
+        id: 'mock_nhl_game_1',
+        homeTeam: { name: 'Boston Bruins', score: 3 },
+        awayTeam: { name: 'Toronto Maple Leafs', score: 2 },
+        status: 'final',
+        period: 3
+      }
+    ],
+    message: 'Stub scoreboard endpoint'
+  });
+});
+
 // Export the router
 export default router;

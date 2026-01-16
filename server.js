@@ -317,7 +317,7 @@ try {
 // Mount routes as specified in File 1
 app.use('/api/nba', nbaRoutes);       // This should handle /api/nba/teams
 app.use('/api/games', liveGamesRoutes); // This should handle /api/games
-app.use('/api/news', newsRoutes);     // This should handle /api/news
+app.use('/api/news', newsRoutes);
 
 // Apply auth middleware to ALL premium routes as specified in File 1
 app.use('/api/premium', authenticateToken, premiumRoutes);
@@ -336,6 +336,7 @@ app.use('/api/draft', draftRoutes);
 app.use('/api/contest', contestRoutes);
 app.use('/api/sports-analytics', sportsAnalyticsRoutes);
 app.use('/api/situational', situationalRoutes);
+app.use('/api/stub', stubRoutes);
 
 // ====================
 // HEALTH CHECK ENDPOINTS
