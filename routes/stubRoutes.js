@@ -1,5 +1,5 @@
-// File: routes/stubRoutes.js (optional approach)
-const express = require('express');
+// routes/stubRoutes.js - ES Module version
+import express from 'express';
 const router = express.Router();
 
 // Central stub endpoints for quick deployment
@@ -139,4 +139,4 @@ function getNHLScoreboard() {
   ];
 }
 
-module.exports = router;
+export default router;  // Changed from module.exports = router
