@@ -1,7 +1,8 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const mongoose = require('mongoose');
+// index.js - ES Module version
+import dotenv from 'dotenv';
+import express from 'express';
+import cors from 'cors';
+import mongoose from 'mongoose';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,12 +12,14 @@ app.use(cors());
 app.use(express.json());
 
 // Sports API Scheduler Integration
-const { sportsScheduler, createSportsRoutes } = require('./services/sports-scheduler');
+// Note: You'll need to convert sports-scheduler.js to ES modules too
+import { sportsScheduler, createSportsRoutes } from './services/sports-scheduler.js';
 app.use('/api/sports', createSportsRoutes(sportsScheduler));
-console.log('🏀 Sports API Scheduler (CommonJS) integrated');
+console.log('🏀 Sports API Scheduler (ES Modules) integrated');
 
 // Rate limiting middleware
-const { apiLimiter, authLimiter, strictLimiter } = require('./middleware/rateLimitMiddleware');
+// Note: You'll need to convert rateLimitMiddleware.js to ES modules too
+import { apiLimiter, authLimiter, strictLimiter } from './middleware/rateLimitMiddleware.js';
 app.use('/api/', apiLimiter);
 app.use('/api/auth/', authLimiter);
 
@@ -32,13 +35,14 @@ mongoose.connect(process.env.MONGODB_URI)
   });
 
 // Import routes
-const authRoutes = require('./routes/auth');
-const nbaRoutes = require('./routes/nba');
-const stubRoutes = require('./routes/stubRoutes');
+import authRoutes from './routes/auth.js';
+import nbaRoutes from './routes/nba.js';
+import stubRoutes from './routes/stubRoutes.js';
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/nba', nbaRoutes);
+app.use('/api/stub', stubRoutes); // Add stubRoutes if you need them
 
 // Root endpoint
 app.get('/', (req, res) => {

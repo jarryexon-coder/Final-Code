@@ -1,8 +1,11 @@
-// services/sports-scheduler.js
-const https = require('https');
-const cron = require('node-cron');
-const NodeCache = require('node-cache');
-require('dotenv').config();
+// services/sports-scheduler.js - ES Module version
+import https from 'https';
+import cron from 'node-cron';
+import NodeCache from 'node-cache';
+import dotenv from 'dotenv';
+import express from 'express'; // Added for createSportsRoutes
+
+dotenv.config();
 
 // Initialize cache
 const apiCache = new NodeCache({ stdTTL: 3600 });
@@ -279,7 +282,6 @@ class SportsApiScheduler {
 
 // Express routes to serve cached data
 function createSportsRoutes(scheduler) {
-  const express = require('express');
   const router = express.Router();
 
   // Get player props
@@ -317,4 +319,5 @@ function createSportsRoutes(scheduler) {
 
 // Initialize everything
 const sportsScheduler = new SportsApiScheduler();
-module.exports = { sportsScheduler, createSportsRoutes };
+
+export { sportsScheduler, createSportsRoutes };

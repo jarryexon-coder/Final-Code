@@ -47,6 +47,7 @@ import contestRoutes from './routes/contestRoutes.js';
 import sportsAnalyticsRoutes from './routes/sportsAnalyticsRoutes.js';
 import situationalRoutes from './routes/situationalRoutes.js';
 import premiumRoutes from './routes/premiumRoutes.js';
+import stubRoutes from './routes/stubRoutes.js'; 
 
 const app = express();
 const PORT = process.env.PORT || 3002;
