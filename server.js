@@ -278,13 +278,31 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 const httpServer = createServer(app);
 
 // ====================
-// REDIS CLIENT (Updated per File 1)
+// REDIS CLIENT WITH AUTHENTICATION (FIXED)
 // ====================
 let redisClient;
 try {
   if (process.env.REDIS_URL) {
-    redisClient = new Redis(process.env.REDIS_URL + '?family=0');
-    console.log('✅ Connected to Redis cache');
+    // Use the Railway Redis URL with authentication
+    redisClient = new Redis(process.env.REDIS_URL, {
+      retryStrategy: function(times) {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      }
+    });
+    console.log('✅ Connected to Redis cache with REDIS_URL');
+  } else if (process.env.REDIS_HOST && process.env.REDIS_PASSWORD) {
+    // Use separate credentials
+    redisClient = new Redis({
+      host: process.env.REDIS_HOST || 'localhost',
+      port: process.env.REDIS_PORT || 6379,
+      password: process.env.REDIS_PASSWORD,
+      retryStrategy: function(times) {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      }
+    });
+    console.log('✅ Connected to Redis with host and password');
   } else {
     console.log('⚠️  Redis URL not configured, using in-memory cache');
   }
@@ -372,35 +390,21 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
-// Add a database health endpoint from File 1
+// ====================
+// DATABASE HEALTH ENDPOINT (FIXED SYNTAX)
+// ====================
 app.get('/api/database/health', async (req, res) => {
   const status = Database.getStatus();
+  res.json({
     success: true,
-  config: { // <-- Remove this outer "config" wrapper
-    features: { liveGames: true, userProfiles: true },
-    apiUrl: process.env.RAILWAY_PUBLIC_FRONTEND_URL || process.env.API_BASE_URL || 'https://pleasing-determination-production.up.railway.app',
-    uiVersion: '1.0.0'
-  },
-  timestamp: new Date().toISOString()
-res.json({
-  success: true,
-  // Move config properties to the root
-  features: { liveGames: true, userProfiles: true },
-  apiUrl: process.env.RAILWAY_PUBLIC_FRONTEND_URL || process.env.API_BASE_URL || 'https://pleasing-determination-production.up.railway.app',
-  uiVersion: '1.0.0',
-  timestamp: new Date().toISOString()
+    status: status,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ====================
-// APP CONFIG ENDPOINT (Updated with code from File 1)
+// APP CONFIG ENDPOINT
 // ====================
-  res.json({
-    success: true,
-    features: { liveGames: true, userProfiles: true },
-    apiUrl: process.env.RAILWAY_PUBLIC_FRONTEND_URL || process.env.API_BASE_URL || 'https://pleasing-determination-production.up.railway.app',
-    uiVersion: '1.0.0',
-    timestamp: new Date().toISOString()
-  });
 app.get('/api/config', (req, res) => {
   res.json({
     success: true,
@@ -409,6 +413,100 @@ app.get('/api/config', (req, res) => {
     uiVersion: '1.0.0',
     timestamp: new Date().toISOString()
   });
+});
+
+// ====================
+// NBA GAMES ENDPOINTS (ADDED FOR FRONTEND)
+// ====================
+app.get('/api/nba/games/today', async (req, res) => {
+  try {
+    console.log('🏀 Fetching NBA games for today...');
+    
+    // Mock response for now - replace with actual data fetching
+    const mockGames = {
+      success: true,
+      games: [
+        {
+          id: 'game_001',
+          homeTeam: 'Los Angeles Lakers',
+          awayTeam: 'Golden State Warriors',
+          date: new Date().toISOString().split('T')[0],
+          time: '7:30 PM ET',
+          venue: 'Crypto.com Arena',
+          status: 'scheduled'
+        },
+        {
+          id: 'game_002',
+          homeTeam: 'Boston Celtics',
+          awayTeam: 'Miami Heat',
+          date: new Date().toISOString().split('T')[0],
+          time: '8:00 PM ET',
+          venue: 'TD Garden',
+          status: 'scheduled'
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      count: 2
+    };
+    
+    res.json(mockGames);
+  } catch (error) {
+    console.error('❌ Error fetching NBA games:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch NBA games'
+    });
+  }
+});
+
+app.get('/api/nba/games', async (req, res) => {
+  try {
+    console.log('🏀 Fetching NBA games...');
+    
+    // Mock response for now - replace with actual data fetching
+    const mockGames = {
+      success: true,
+      games: [
+        {
+          id: 'game_001',
+          homeTeam: 'Los Angeles Lakers',
+          awayTeam: 'Golden State Warriors',
+          date: '2024-01-15',
+          time: '7:30 PM ET',
+          venue: 'Crypto.com Arena',
+          status: 'scheduled'
+        },
+        {
+          id: 'game_002',
+          homeTeam: 'Boston Celtics',
+          awayTeam: 'Miami Heat',
+          date: '2024-01-15',
+          time: '8:00 PM ET',
+          venue: 'TD Garden',
+          status: 'scheduled'
+        },
+        {
+          id: 'game_003',
+          homeTeam: 'Phoenix Suns',
+          awayTeam: 'Dallas Mavericks',
+          date: '2024-01-16',
+          time: '9:00 PM ET',
+          venue: 'Footprint Center',
+          status: 'scheduled'
+        }
+      ],
+      timestamp: new Date().toISOString(),
+      count: 3
+    };
+    
+    res.json(mockGames);
+  } catch (error) {
+    console.error('❌ Error fetching NBA games:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch NBA games'
+    });
+  }
 });
 
 // ====================
@@ -421,7 +519,6 @@ app.get('/privacy', (req, res) => {
     <head><title>Privacy Policy - NBA Fantasy Pro</title></head>
     <body>
       <h1>Privacy Policy</h1>
-      <!-- Paste your full PrivacyPolicy.js text here -->
       <p>Privacy policy content will be added here.</p>
     </body>
     </html>
