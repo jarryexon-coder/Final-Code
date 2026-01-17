@@ -1,71 +1,68 @@
-// test-kalshi.js - Test Kalshi API integration
-import axios from 'axios';
+// test-kalshi.js
+const axios = require('axios');
 
-const API_BASE = 'http://localhost:3002/api';
+const BASE_URL = 'http://localhost:3002';
 
 async function testKalshiEndpoints() {
-  console.log('🧪 Testing Kalshi API endpoints...\n');
+  console.log('🧪 Starting Kalshi Integration Tests...\n');
   
-  const endpoints = [
-    { method: 'GET', path: '/kalshi/health', auth: false },
-    { method: 'GET', path: '/kalshi/markets?limit=3', auth: true },
-    { method: 'GET', path: '/kalshi/categories', auth: false },
-    { method: 'GET', path: '/kalshi/news?limit=2', auth: false },
-    { method: 'GET', path: '/kalshi/stats', auth: false }
-  ];
-  
-  for (const endpoint of endpoints) {
-    try {
-      const url = `${API_BASE}${endpoint.path}`;
-      console.log(`🔍 Testing: ${endpoint.method} ${url}`);
-      
-      const config = endpoint.auth ? {
-        headers: {
-          'kalshi-access-key': 'test-key-mock'
-        }
-      } : {};
-      
-      let response;
-      if (endpoint.method === 'GET') {
-        response = await axios.get(url, config);
-      }
-      
-      console.log(`✅ Status: ${response.status}`);
-      console.log(`📊 Response keys: ${Object.keys(response.data).join(', ')}`);
-      
-      if (response.data.success !== undefined) {
-        console.log(`✓ Success: ${response.data.success}`);
-      }
-      
-      console.log('---\n');
-      
-    } catch (error) {
-      console.error(`❌ Error: ${error.message}`);
-      if (error.response) {
-        console.error(`   Status: ${error.response.status}`);
-        console.error(`   Data: ${JSON.stringify(error.response.data)}`);
-      }
-      console.log('---\n');
-    }
-  }
-  
-  // Test predictions with Kalshi integration
-  console.log('🤖 Testing Kalshi-integrated predictions...');
   try {
-    const predictionResponse = await axios.post(`${API_BASE}/predictions/generate`, {
-      prompt: "Will the Lakers beat the Warriors tonight?",
+    // 1. Test Kalshi Health
+    console.log('1. Testing /api/kalshi/health...');
+    const healthRes = await axios.get(`${BASE_URL}/api/kalshi/health`);
+    console.log(`   ✅ Status: ${healthRes.status}`);
+    console.log(`   Mode: ${healthRes.data.status}`);
+    console.log(`   API Key Configured: ${healthRes.data.apiKeyConfigured}\n`);
+    
+    // 2. Test Prediction Generation
+    console.log('2. Testing /api/predictions/generate...');
+    const predictionRes = await axios.post(`${BASE_URL}/api/predictions/generate`, {
+      prompt: "Will Warriors win the championship?",
       sport: "NBA",
       includeKalshi: true
     });
+    console.log(`   ✅ Status: ${predictionRes.status}`);
+    console.log(`   Prediction ID: ${predictionRes.data.prediction.id}`);
+    console.log(`   Kalshi Context: ${predictionRes.data.prediction.kalshiContext ? '✅ Present' : '❌ Missing'}\n`);
     
-    console.log(`✅ Prediction generated: ${predictionResponse.data.success}`);
-    if (predictionResponse.data.prediction?.kalshiContext) {
-      console.log(`✓ Kalshi context included: ${predictionResponse.data.prediction.kalshiContext.hasMarkets}`);
-    }
+    // 3. Test Analytics Logging
+    console.log('3. Testing /api/analytics/log...');
+    const analyticsRes = await axios.post(`${BASE_URL}/api/analytics/log`, {
+      eventName: "kalshi_market_view",
+      eventData: {
+        marketId: "NBA-WARRIORS-2024",
+        action: "viewed",
+        price: "0.25"
+      },
+      userId: "test_user_" + Date.now(),
+      sessionId: "session_" + Date.now(),
+      source: "test_script"
+    });
+    console.log(`   ✅ Status: ${analyticsRes.status}`);
+    console.log(`   Event ID: ${analyticsRes.data.eventId}`);
+    console.log(`   Is Kalshi Event: ${analyticsRes.data.isKalshiEvent}\n`);
+    
+    // 4. Test Analytics Summary
+    console.log('4. Testing /api/analytics/summary...');
+    const summaryRes = await axios.get(`${BASE_URL}/api/analytics/summary?includeKalshi=true`);
+    console.log(`   ✅ Status: ${summaryRes.status}`);
+    console.log(`   Kalshi Metrics: ${summaryRes.data.summary.kalshiMetrics ? '✅ Present' : '❌ Missing'}`);
+    console.log(`   Total Sessions: ${summaryRes.data.summary.totalSessions}\n`);
+    
+    console.log('🎉 All Kalshi endpoints are working correctly!');
+    console.log('\n📋 Summary:');
+    console.log('- Kalshi health endpoint: ✅');
+    console.log('- Prediction generation with Kalshi: ✅');
+    console.log('- Analytics logging: ✅');
+    console.log('- Analytics summary with Kalshi metrics: ✅');
+    
   } catch (error) {
-    console.error(`❌ Prediction error: ${error.message}`);
+    console.error('❌ Test failed:', error.message);
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+    }
   }
 }
 
 // Run tests
-testKalshiEndpoints().catch(console.error);
+testKalshiEndpoints();

@@ -1,4 +1,4 @@
-// server.js - Complete NBA Fantasy AI Backend Server with Kalshi Integration
+// server.js - Complete NBA Fantasy AI Backend Server
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -82,6 +82,256 @@ app.use(cors({
 }));
 
 console.log('✅ CORS middleware configured with allowed origins:', allowedOrigins);
+
+// ====================
+// KALSHI ENDPOINTS - ADD HERE TO AVOID CONFLICTS
+// ====================
+
+// Kalshi health check
+app.get('/api/kalshi/health', async (req, res) => {
+  try {
+    const hasApiKey = !!process.env.KALSHI_API_KEY;
+    
+    res.json({
+      success: true,
+      service: 'kalshi-integration',
+      status: hasApiKey ? 'configured' : 'mock-mode',
+      apiKeyConfigured: hasApiKey,
+      environment: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString(),
+      features: {
+        markets: true,
+        trading: true,
+        news: true,
+        analytics: true
+      }
+    });
+  } catch (error) {
+    console.error('❌ Kalshi health check error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Unified predictions endpoint with Kalshi integration
+app.post('/api/kalshi/predictions/generate', async (req, res) => {
+  try {
+    const { prompt, sport, includeKalshi = true } = req.body;
+    
+    if (!prompt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompt is required'
+      });
+    }
+    
+    console.log(`🤖 Generating prediction: ${prompt}, sport=${sport}, kalshi=${includeKalshi}`);
+    
+    // Base prediction
+    const mockPrediction = {
+      id: `pred_${Date.now()}`,
+      prompt,
+      sport: sport || 'general',
+      generatedAt: new Date().toISOString(),
+      analysis: `Based on ${sport || 'sports'} analytics and historical data: ${prompt}. The model indicates a ${Math.floor(Math.random() * 30) + 65}% confidence level with +${(Math.random() * 5 + 1).toFixed(1)}% expected value.`,
+      confidence: Math.floor(Math.random() * 30) + 65,
+      edge: (Math.random() * 5 + 1).toFixed(1) + '%',
+      keyFactors: [
+        'Recent team performance trends',
+        'Player injury reports',
+        'Historical matchup data',
+        'Venue and travel considerations',
+        'Market inefficiencies'
+      ],
+      recommendation: sport === 'NBA' ? 'Consider the over on total points' :
+                     sport === 'NHL' ? 'Bet the under on total goals' :
+                     'Evaluate the moneyline value'
+    };
+    
+    // If Kalshi integration is requested, add market context
+    if (includeKalshi) {
+      // Find relevant Kalshi markets
+      const relevantMarkets = [
+        {
+          id: '4',
+          marketId: 'NBA-WARRIORS-2024',
+          question: 'Will Warriors win 2024 NBA Championship?',
+          yesPrice: '0.25',
+          noPrice: '0.75',
+          edge: '-2.3%',
+          analysis: 'Warriors aging roster showing signs of decline.'
+        },
+        {
+          id: '5',
+          marketId: 'NHL-BRUINS-2024',
+          question: 'Will Bruins win 2024 Stanley Cup?',
+          yesPrice: '0.18',
+          noPrice: '0.82',
+          edge: '+1.5%',
+          analysis: 'Strong regular season team but playoff history concerning.'
+        }
+      ];
+      
+      mockPrediction.kalshiContext = {
+        hasMarkets: true,
+        relevantMarkets: relevantMarkets.filter(m => 
+          sport ? m.question.toLowerCase().includes(sport.toLowerCase()) : true
+        ),
+        averageEdge: '+1.2%',
+        marketSentiment: sport === 'NBA' ? 'bullish' : sport === 'NHL' ? 'neutral' : 'mixed',
+        note: 'Kalshi market data integrated into prediction'
+      };
+    }
+    
+    res.json({
+      success: true,
+      prediction: mockPrediction,
+      metadata: {
+        source: 'ai-model',
+        kalshiIntegrated: includeKalshi,
+        processingTime: '150ms',
+        note: 'Mock AI prediction with Kalshi integration - Integrate with real AI model for production'
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error generating prediction:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Analytics logging with Kalshi events
+app.post('/api/kalshi/analytics/log', async (req, res) => {
+  try {
+    const { eventName, eventData, userId, sessionId, source = 'web' } = req.body;
+    
+    // Check if it's a Kalshi-related event
+    const isKalshiEvent = eventName.includes('kalshi') || 
+                         (eventData && (eventData.marketId || eventData.tradeId));
+    
+    console.log(`📊 Analytics Event: ${eventName}`, {
+      userId,
+      sessionId,
+      source,
+      isKalshiEvent,
+      timestamp: new Date().toISOString(),
+      ip: req.ip
+    });
+    
+    // Log to database if connected
+    if (global.isMongoConnected && mongoose.connection.db) {
+      try {
+        const db = mongoose.connection.db;
+        const analyticsEvent = {
+          eventName,
+          eventData,
+          userId,
+          sessionId,
+          source,
+          isKalshiEvent,
+          timestamp: new Date(),
+          ip: req.ip,
+          userAgent: req.headers['user-agent']
+        };
+        
+        await db.collection('analyticsEvents').insertOne(analyticsEvent);
+        
+        // If it's a Kalshi event, also log to separate collection
+        if (isKalshiEvent) {
+          await db.collection('kalshiAnalytics').insertOne({
+            ...analyticsEvent,
+            collectionName: 'kalshiAnalytics',
+            eventId: `kalshi_${Date.now()}`
+          });
+        }
+      } catch (dbError) {
+        console.error('❌ Database logging error:', dbError.message);
+      }
+    }
+    
+    res.json({
+      success: true,
+      eventId: `event_${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      loggedToDatabase: global.isMongoConnected,
+      isKalshiEvent
+    });
+    
+  } catch (error) {
+    console.error('❌ Error logging analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get analytics summary with Kalshi metrics
+app.get('/api/kalshi/analytics/summary', async (req, res) => {
+  try {
+    const { userId, startDate, endDate, includeKalshi = true } = req.query;
+    
+    // Base analytics summary
+    const summary = {
+      totalSessions: 42,
+      favoriteFeature: 'Kalshi Predictions',
+      timeSpent: '12h 45m',
+      predictionsGenerated: 28,
+      predictionsCorrect: 19,
+      accuracyRate: '67.9%',
+      topSports: ['NBA', 'NHL', 'NFL'],
+      usageByDay: {
+        monday: 2.5,
+        tuesday: 3.2,
+        wednesday: 4.1,
+        thursday: 3.8,
+        friday: 5.2,
+        saturday: 6.8,
+        sunday: 7.4
+      }
+    };
+    
+    // Add Kalshi metrics if requested
+    if (includeKalshi) {
+      summary.kalshiMetrics = {
+        tradesPlaced: 15,
+        totalVolume: '$1,250',
+        totalProfit: '+$42.50',
+        winRate: '73.3%',
+        favoriteMarket: 'Sports',
+        marketsResearched: 47,
+        avgResearchTime: '8m 24s',
+        mostProfitableSport: 'NBA',
+        kalshiROI: '+24.3%'
+      };
+    }
+    
+    res.json({
+      success: true,
+      userId: userId || 'anonymous',
+      summary,
+      period: {
+        start: startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+        end: endDate || new Date().toISOString()
+      },
+      includeKalshi
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching analytics summary:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Then continue with your normal route mounting
 
 // ====================
 // MONGO DB CONNECTION
@@ -338,254 +588,6 @@ app.use('/api/contest', contestRoutes);
 app.use('/api/sports-analytics', sportsAnalyticsRoutes);
 app.use('/api/situational', situationalRoutes);
 app.use('/api/stub', stubRoutes);
-
-// ====================
-// KALSHI INTEGRATION ENDPOINTS (ADDED FROM FILE 1)
-// ====================
-
-// Kalshi health check
-app.get('/api/kalshi/health', async (req, res) => {
-  try {
-    const hasApiKey = !!process.env.KALSHI_API_KEY;
-    
-    res.json({
-      success: true,
-      service: 'kalshi-integration',
-      status: hasApiKey ? 'configured' : 'mock-mode',
-      apiKeyConfigured: hasApiKey,
-      environment: process.env.NODE_ENV || 'development',
-      timestamp: new Date().toISOString(),
-      features: {
-        markets: true,
-        trading: true,
-        news: true,
-        analytics: true
-      }
-    });
-  } catch (error) {
-    console.error('❌ Kalshi health check error:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Unified predictions endpoint with Kalshi integration
-app.post('/api/predictions/generate', async (req, res) => {
-  try {
-    const { prompt, sport, includeKalshi = true } = req.body;
-    
-    if (!prompt) {
-      return res.status(400).json({
-        success: false,
-        error: 'Prompt is required'
-      });
-    }
-    
-    console.log(`🤖 Generating prediction: ${prompt}, sport=${sport}, kalshi=${includeKalshi}`);
-    
-    // Base prediction
-    const mockPrediction = {
-      id: `pred_${Date.now()}`,
-      prompt,
-      sport: sport || 'general',
-      generatedAt: new Date().toISOString(),
-      analysis: `Based on ${sport || 'sports'} analytics and historical data: ${prompt}. The model indicates a ${Math.floor(Math.random() * 30) + 65}% confidence level with +${(Math.random() * 5 + 1).toFixed(1)}% expected value.`,
-      confidence: Math.floor(Math.random() * 30) + 65,
-      edge: (Math.random() * 5 + 1).toFixed(1) + '%',
-      keyFactors: [
-        'Recent team performance trends',
-        'Player injury reports',
-        'Historical matchup data',
-        'Venue and travel considerations',
-        'Market inefficiencies'
-      ],
-      recommendation: sport === 'NBA' ? 'Consider the over on total points' :
-                     sport === 'NHL' ? 'Bet the under on total goals' :
-                     'Evaluate the moneyline value'
-    };
-    
-    // If Kalshi integration is requested, add market context
-    if (includeKalshi) {
-      // Find relevant Kalshi markets
-      const relevantMarkets = [
-        {
-          id: '4',
-          marketId: 'NBA-WARRIORS-2024',
-          question: 'Will Warriors win 2024 NBA Championship?',
-          yesPrice: '0.25',
-          noPrice: '0.75',
-          edge: '-2.3%',
-          analysis: 'Warriors aging roster showing signs of decline.'
-        },
-        {
-          id: '5',
-          marketId: 'NHL-BRUINS-2024',
-          question: 'Will Bruins win 2024 Stanley Cup?',
-          yesPrice: '0.18',
-          noPrice: '0.82',
-          edge: '+1.5%',
-          analysis: 'Strong regular season team but playoff history concerning.'
-        }
-      ];
-      
-      mockPrediction.kalshiContext = {
-        hasMarkets: true,
-        relevantMarkets: relevantMarkets.filter(m => 
-          sport ? m.question.toLowerCase().includes(sport.toLowerCase()) : true
-        ),
-        averageEdge: '+1.2%',
-        marketSentiment: sport === 'NBA' ? 'bullish' : sport === 'NHL' ? 'neutral' : 'mixed',
-        note: 'Kalshi market data integrated into prediction'
-      };
-    }
-    
-    res.json({
-      success: true,
-      prediction: mockPrediction,
-      metadata: {
-        source: 'ai-model',
-        kalshiIntegrated: includeKalshi,
-        processingTime: '150ms',
-        note: 'Mock AI prediction with Kalshi integration - Integrate with real AI model for production'
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Error generating prediction:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Analytics logging with Kalshi events
-app.post('/api/analytics/log', async (req, res) => {
-  try {
-    const { eventName, eventData, userId, sessionId, source = 'web' } = req.body;
-    
-    // Check if it's a Kalshi-related event
-    const isKalshiEvent = eventName.includes('kalshi') || 
-                         (eventData && (eventData.marketId || eventData.tradeId));
-    
-    console.log(`📊 Analytics Event: ${eventName}`, {
-      userId,
-      sessionId,
-      source,
-      isKalshiEvent,
-      timestamp: new Date().toISOString(),
-      ip: req.ip
-    });
-    
-    // Log to database if connected
-    if (global.isMongoConnected && mongoose.connection.db) {
-      try {
-        const db = mongoose.connection.db;
-        const analyticsEvent = {
-          eventName,
-          eventData,
-          userId,
-          sessionId,
-          source,
-          isKalshiEvent,
-          timestamp: new Date(),
-          ip: req.ip,
-          userAgent: req.headers['user-agent']
-        };
-        
-        await db.collection('analyticsEvents').insertOne(analyticsEvent);
-        
-        // If it's a Kalshi event, also log to separate collection
-        if (isKalshiEvent) {
-          await db.collection('kalshiAnalytics').insertOne({
-            ...analyticsEvent,
-            collectionName: 'kalshiAnalytics',
-            eventId: `kalshi_${Date.now()}`
-          });
-        }
-      } catch (dbError) {
-        console.error('❌ Database logging error:', dbError.message);
-      }
-    }
-    
-    res.json({
-      success: true,
-      eventId: `event_${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      loggedToDatabase: global.isMongoConnected,
-      isKalshiEvent
-    });
-    
-  } catch (error) {
-    console.error('❌ Error logging analytics:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Get analytics summary with Kalshi metrics
-app.get('/api/analytics/summary', async (req, res) => {
-  try {
-    const { userId, startDate, endDate, includeKalshi = true } = req.query;
-    
-    // Base analytics summary
-    const summary = {
-      totalSessions: 42,
-      favoriteFeature: 'Kalshi Predictions',
-      timeSpent: '12h 45m',
-      predictionsGenerated: 28,
-      predictionsCorrect: 19,
-      accuracyRate: '67.9%',
-      topSports: ['NBA', 'NHL', 'NFL'],
-      usageByDay: {
-        monday: 2.5,
-        tuesday: 3.2,
-        wednesday: 4.1,
-        thursday: 3.8,
-        friday: 5.2,
-        saturday: 6.8,
-        sunday: 7.4
-      }
-    };
-    
-    // Add Kalshi metrics if requested
-    if (includeKalshi) {
-      summary.kalshiMetrics = {
-        tradesPlaced: 15,
-        totalVolume: '$1,250',
-        totalProfit: '+$42.50',
-        winRate: '73.3%',
-        favoriteMarket: 'Sports',
-        marketsResearched: 47,
-        avgResearchTime: '8m 24s',
-        mostProfitableSport: 'NBA',
-        kalshiROI: '+24.3%'
-      };
-    }
-    
-    res.json({
-      success: true,
-      userId: userId || 'anonymous',
-      summary,
-      period: {
-        start: startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        end: endDate || new Date().toISOString()
-      },
-      includeKalshi
-    });
-    
-  } catch (error) {
-    console.error('❌ Error fetching analytics summary:', error);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
 
 // ====================
 // HEALTH CHECK ENDPOINTS
@@ -1295,3 +1297,4 @@ process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
 initializeServer();
+
