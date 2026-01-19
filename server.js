@@ -321,11 +321,11 @@ app.use('/api/nba', nbaRoutes);       // This should handle /api/nba/teams
 app.use('/api/games', liveGamesRoutes); // This should handle /api/games
 app.use('/api/news', newsRoutes);
 
-// MOUNT TEST ROUTES HERE - BEFORE AUTHENTICATION
-app.use('/api/predictions', predictionsRoutes);  // This will handle /api/predictions/generate
-app.use('/api/analytics', analyticsRoutes);      // This will handle /api/analytics/log and /api/analytics/summary
+// Mount predictions routes with authentication
+app.use('/api/predictions', predictionsRoutes);
 
 // Mount other routes
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api/nhl', nhlRoutes);
 app.use('/api/nfl', nflRoutes);
 app.use('/api/fantasy', fantasyRoutes);
@@ -340,139 +340,8 @@ app.use('/api/sports-analytics', sportsAnalyticsRoutes);
 app.use('/api/situational', situationalRoutes);
 app.use('/api/stub', stubRoutes);
 
-// IMPORTANT: Mount premium routes WITHOUT authentication for testing
-// Create a temporary test version of premium routes
-app.get('/api/premium/validate/:userId', (req, res) => {
-  console.log('🔑 TEST ROUTE: Validating subscription for:', req.params.userId);
-  res.status(200).json({
-    success: true,
-    data: {
-      userId: req.params.userId || 'test123',
-      isValid: true,
-      subscription: { tier: 'pro', status: 'active' },
-      features: ['secret_phrases', 'advanced_analytics'],
-      note: 'Test route - no auth required'
-    }
-  });
-});
-
-app.get('/api/premium/limits/:userId', (req, res) => {
-  console.log('📊 TEST ROUTE: Checking limits for:', req.params.userId);
-  res.status(200).json({
-    success: true,
-    data: {
-      userId: req.params.userId || 'test123',
-      featureKey: req.query.featureKey || 'secret_phrases',
-      limits: { daily: 50, monthly: 1500 },
-      usage: { dailyUsed: 15, monthlyUsed: 320 },
-      remaining: { daily: 35, monthly: 1180 }
-    }
-  });
-});
-
-// Then mount the real premium routes WITH authentication
+// Mount premium routes WITH authentication
 app.use('/api/premium', authenticateToken, premiumRoutes);
-
-// ====================
-// AI PREDICTIONS ENDPOINTS (ADDED - FIX FOR TEST FAILURES)
-// ====================
-app.post('/api/predictions/generate', (req, res) => {
-  console.log('🤖 Generating AI prediction (mock)');
-  
-  const { gameId, team1, team2, sport = 'NBA' } = req.body;
-  
-  // Mock AI prediction response
-  const prediction = {
-    success: true,
-    predictionId: `pred_${Date.now()}`,
-    sport: sport,
-    game: `${team1 || 'Team A'} vs ${team2 || 'Team B'}`,
-    predictedWinner: Math.random() > 0.5 ? team1 || 'Team A' : team2 || 'Team B',
-    confidence: (Math.random() * 0.3 + 0.65).toFixed(2), // 65-95% confidence
-    predictedScore: {
-      home: Math.floor(Math.random() * 30 + 90),
-      away: Math.floor(Math.random() * 30 + 85)
-    },
-    keyFactors: [
-      'Team momentum in last 5 games',
-      'Home court advantage',
-      'Head-to-head record',
-      'Injury reports',
-      'Rest days advantage'
-    ],
-    riskLevel: Math.random() > 0.7 ? 'High' : 'Medium',
-    recommendedBet: Math.random() > 0.5 ? 'Moneyline' : 'Spread',
-    timestamp: new Date().toISOString(),
-    note: 'This is a mock prediction for testing. Real AI integration coming soon.'
-  };
-  
-  res.status(200).json(prediction);
-});
-
-// ====================
-// ANALYTICS ENDPOINTS (ADDED - FIX FOR TEST FAILURES)
-// ====================
-
-// Log analytics event
-app.post('/api/analytics/log', (req, res) => {
-  console.log('📊 Logging analytics event');
-  
-  const { userId, eventType, eventData, timestamp = new Date().toISOString() } = req.body;
-  
-  // Mock analytics logging
-  const analyticsEvent = {
-    success: true,
-    eventId: `analytics_${Date.now()}`,
-    userId: userId || 'anonymous',
-    eventType: eventType || 'page_view',
-    eventData: eventData || {},
-    timestamp: timestamp,
-    loggedAt: new Date().toISOString(),
-    serverInfo: {
-      nodeVersion: process.version,
-      environment: process.env.NODE_ENV || 'development'
-    }
-  };
-  
-  res.status(200).json(analyticsEvent);
-});
-
-// Get analytics summary
-app.get('/api/analytics/summary', (req, res) => {
-  console.log('📈 Fetching analytics summary');
-  
-  const { userId, startDate, endDate } = req.query;
-  
-  // Mock analytics summary
-  const summary = {
-    success: true,
-    userId: userId || 'all',
-    period: {
-      start: startDate || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      end: endDate || new Date().toISOString()
-    },
-    metrics: {
-      totalEvents: 1250,
-      uniqueUsers: 42,
-      avgEventsPerUser: 29.8,
-      topEvents: [
-        { eventType: 'page_view', count: 850 },
-        { eventType: 'game_view', count: 320 },
-        { eventType: 'prediction_generated', count: 80 }
-      ],
-      dailyAverage: 178.6
-    },
-    userMetrics: userId ? {
-      totalEvents: 45,
-      lastActive: new Date().toISOString(),
-      favoriteSport: 'NBA',
-      predictionAccuracy: '68.2%'
-    } : null,
-    timestamp: new Date().toISOString()
-  };
-  
-  res.status(200).json(summary);
-});
 
 // ====================
 // HEALTH CHECK ENDPOINTS
@@ -531,7 +400,8 @@ app.get('/api/health', async (req, res) => {
 // DATABASE HEALTH ENDPOINT (FIXED SYNTAX)
 // ====================
 app.get('/api/database/health', async (req, res) => {
-  const status = Database.getStatus();
+  const mongoState = mongoose.connection.readyState;
+  const status = mongoState === 1 ? 'connected' : 'disconnected';
   res.json({
     success: true,
     status: status,
@@ -664,74 +534,6 @@ app.get('/privacy', (req, res) => {
 });
 
 // ====================
-// TEST PREMIUM ENDPOINTS (WITHOUT AUTH FOR TESTING)
-// ====================
-
-// These endpoints are for testing - in production they should be behind authentication
-app.get('/api/premium/validate/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const validation = {
-      userId: userId || 'test123',
-      isValid: true,
-      subscription: {
-        tier: 'pro',
-        status: 'active',
-        renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        paymentMethod: 'credit_card',
-        nextBillingDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      features: ['secret_phrases', 'advanced_analytics', 'priority_support'],
-      limits: {
-        dailySecretPhrases: 50,
-        monthlyAnalytics: 1000,
-        concurrentSessions: 3
-      },
-      note: 'Mock data - subscription validation working'
-    };
-    res.status(200).json({ success: true, data: validation });
-  } catch (error) {
-    console.error('❌ Validate subscription endpoint error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-app.get('/api/premium/limits/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { featureKey } = req.query;
-    const limits = {
-      userId: userId || 'test123',
-      featureKey: featureKey || 'secret_phrases',
-      limits: {
-        daily: 50,
-        monthly: 1500,
-        concurrent: 3
-      },
-      usage: {
-        dailyUsed: 15,
-        monthlyUsed: 320,
-        currentConcurrent: 1
-      },
-      remaining: {
-        daily: 35,
-        monthly: 1180,
-        available: true
-      },
-      resetTimes: {
-        dailyReset: new Date(Date.now() + 24 * 60 * 60 * 1000 - (Date.now() % (24 * 60 * 60 * 1000))).toISOString(),
-        monthlyReset: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      },
-      note: 'Mock data - usage limits tracking active'
-    };
-    res.status(200).json({ success: true, data: limits });
-  } catch (error) {
-    console.error('❌ Usage limits endpoint error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ====================
 // SECRET PHRASE ROUTES - FIXED VERSION
 // ====================
 const secretPhraseRouter = express.Router();
@@ -808,46 +610,46 @@ secretPhraseRouter.post('/log-event', async (req, res) => {
     
     console.log('💾 [SECRET_PHRASE] Event created:', event._id.toString());
     
-// Save to MongoDB if connected
-if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
-  try {
-    const db = mongoose.connection.db;
+    // Save to MongoDB if connected
+    if (mongoose.connection.readyState === 1 && mongoose.connection.db) {
+      try {
+        const db = mongoose.connection.db;
 
-    // Save to analyticsevents 
-    const analyticResult = await db.collection('analyticsevents').insertOne(event);
-    console.log('✅ Saved to analyticsevents:', analyticResult.insertedId);
+        // Save to analyticsevents 
+        const analyticResult = await db.collection('analyticsevents').insertOne(event);
+        console.log('✅ Saved to analyticsevents:', analyticResult.insertedId);
 
-    // Also save to secretphraseanalytics
-    const secretEvent = {
-      ...event,
-      collectionName: 'secretphraseanalytics',
+        // Also save to secretphraseanalytics
+        const secretEvent = {
+          ...event,
+          collectionName: 'secretphraseanalytics',
+          eventId: event._id.toString(),
+          savedAt: new Date()
+        };
+
+        const secretResult = await db.collection('secretphraseanalytics').insertOne(secretEvent);
+        console.log('✅ Saved to secretphraseanalytics:', secretResult.insertedId);
+
+        // Verify the save
+        const verifyDoc = await db.collection('analyticsevents').findOne({ _id: event._id });
+        console.log(`📊 Verification: Document ${verifyDoc ? '✅ exists' : '❌ not found'} in database`);
+      } catch (dbError) {
+        console.error('❌ Database save error:', dbError.message);
+        console.error('❌ Error stack:', dbError.stack);
+      }
+    } else {
+      console.warn('⚠️  MongoDB not connected, skipping database save');
+      console.warn('⚠️  MongoDB state:', mongoose.connection.readyState);
+      console.warn('⚠️  MongoDB db object:', !!mongoose.connection.db);
+    }
+
+    res.status(201).json({
+      success: true,
       eventId: event._id.toString(),
-      savedAt: new Date()
-    };
-
-    const secretResult = await db.collection('secretphraseanalytics').insertOne(secretEvent);
-    console.log('✅ Saved to secretphraseanalytics:', secretResult.insertedId);
-
-    // Verify the save
-    const verifyDoc = await db.collection('analyticsevents').findOne({ _id: event._id });
-    console.log(`📊 Verification: Document ${verifyDoc ? '✅ exists' : '❌ not found'} in database`);
-  } catch (dbError) {
-    console.error('❌ Database save error:', dbError.message);
-    console.error('❌ Error stack:', dbError.stack);
-  }
-} else {
-  console.warn('⚠️  MongoDB not connected, skipping database save');
-  console.warn('⚠️  MongoDB state:', mongoose.connection.readyState);
-  console.warn('⚠️  MongoDB db object:', !!mongoose.connection.db);
-}
-
-res.status(201).json({
-  success: true,
-  eventId: event._id.toString(),
-  message: 'Secret phrase logged successfully',
-  userId: userId,
-  timestamp: event.timestamp
-});
+      message: 'Secret phrase logged successfully',
+      userId: userId,
+      timestamp: event.timestamp
+    });
   } catch (error) {
     console.error('❌ Secret phrase route error:', error);
     console.error('❌ Error stack:', error.stack);
