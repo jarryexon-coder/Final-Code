@@ -1,0 +1,14 @@
+{
+  "extension": ["js"],
+  "spec": "test/integration/*.test.js",
+  "timeout": 10000,
+  "exit": true,
+  "reporter": "spec",
+  "require": [],
+  "loader": [],
+  "full-trace": true,
+  "node-option": [
+    "experimental-vm-modules",
+    "no-warnings"
+  ]
+}

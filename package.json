@@ -9,12 +9,22 @@
     "dev": "nodemon server.js",
     "server": "node server.js",
     "legacy": "node index.js",
-    "test": "curl http://localhost:3000/health",
+    "test": "node --experimental-vm-modules test/run-tests.js",
+    "test:integration": "mocha test/integration/*.test.js --timeout 10000 --exit",
+    "test:unit": "mocha test/unit/*.test.js",
+    "test:watch": "mocha test/**/*.test.js --watch",
+    "test:coverage": "nyc mocha test/**/*.test.js",
+    "test:ci": "npm run test -- --reporter json > test-results.json",
     "test:endpoints": "curl http://localhost:3000/health && curl http://localhost:3000/api/players && curl http://localhost:3000/api/teams",
     "test:phase4": "node test-phase4.js",
     "test:phase5": "node test-phase5.js",
     "test:social": "node test-social.js",
     "test:handlers": "node test-handlers.js",
+    "test": "node test-simple.js",
+    "test:mocha": "npx mocha test/integration/app-flow.test.js --timeout 10000 --exit",
+    "test:integration": "node run-tests.js",
+    "test:analytics": "./test-analytics-dashboard.sh",
+    "test:railway": "curl https://nba-backend-production.up.railway.app/health",
     "test:health": "curl -s http://localhost:3000/health | jq .",
     "test:teams": "curl -s http://localhost:3000/api/teams | jq .",
     "test:all": "npm run test:health && npm run test:teams",
@@ -61,7 +71,6 @@
     "morgan": "^1.10.1",
     "node-cache": "^5.1.2",
     "node-cron": "^3.0.3",
-    "node-fetch": "^3.3.2",
     "nodemailer": "^7.0.11",
     "pg": "^8.16.3",
     "puppeteer": "^22.15.0",
@@ -77,15 +86,24 @@
     "web-push": "^3.6.7",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "supertest": "^6.3.3",
+    "chai": "^4.3.10",
+    "mocha": "^10.2.0",
+    "node-fetch": "^3.3.2",
+    "nyc": "^15.1.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
+    "chai": "^4.3.10",
     "eslint": "^8.57.1",
     "jest": "^29.7.0",
+    "mocha": "^10.2.0",
+    "node-fetch": "^3.3.2",
     "nodemon": "^3.1.11",
+    "nyc": "^15.1.0",
     "prettier": "^3.7.4",
-    "supertest": "^7.1.4"
+    "supertest": "^6.3.3"
   },
   "engines": {
     "node": ">=20.0.0",
@@ -114,10 +132,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/nba-fantasy-ai-backend.git"
+    "url": "git+https://github.com/jarryexon-coder/Final-Code.git"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/nba-fantasy-ai-backend/issues"
+    "url": "https://github.com/jarryexon-coder/Final-Code/issues"
   },
-  "homepage": "https://github.com/yourusername/nba-fantasy-ai-backend#readme"
+  "homepage": "https://github.com/jarryexon-coder/Final-Code#readme"
 }

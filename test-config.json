@@ -1,0 +1,39 @@
+{
+  "test": {
+    "baseUrl": "http://localhost:3002",
+    "analyticsDashboardUrl": "http://localhost:3004",
+    "timeout": 10000,
+    "retries": 3,
+    "reporters": ["spec", "json"],
+    "testFiles": ["**/*.test.js"],
+    "environment": "test"
+  },
+  "users": {
+    "testUser": {
+      "userId": "test_user_123",
+      "email": "test@example.com",
+      "subscriptionTier": "premium"
+    },
+    "adminUser": {
+      "userId": "admin_user_456",
+      "email": "admin@example.com",
+      "subscriptionTier": "admin"
+    }
+  },
+  "services": {
+    "nbaBackend": {
+      "port": 3002,
+      "healthEndpoint": "/health",
+      "required": true
+    },
+    "analyticsDashboard": {
+      "port": 3004,
+      "healthEndpoint": "/health",
+      "required": false
+    },
+    "database": {
+      "required": true,
+      "type": "mongodb"
+    }
+  }
+}
