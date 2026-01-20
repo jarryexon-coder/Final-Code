@@ -16,36 +16,48 @@ const router = express.Router();
  * Verify webhook signature from RevenueCat
  * Updated to include timestamp as per RevenueCat documentation
  */
-function verifyWebhookSignature(body, signature, secret, timestamp) {
+function verifyWebhookSignature(rawBody, signature, secret, timestamp) {
   try {
-    // RevenueCat signature format: HMAC_SHA256(secret, timestamp + '.' + body)
-    const data = timestamp + '.' + JSON.stringify(body);
+    // RevenueCat signature format: HMAC_SHA256(secret, timestamp + '.' + rawBody)
+    const data = timestamp + '.' + rawBody;
     const hmac = crypto.createHmac('sha256', secret);
     const digest = hmac.update(data).digest('hex');
-    return signature === digest;
+    
+    // Use timing-safe comparison
+    const digestBuffer = Buffer.from(digest, 'hex');
+    const signatureBuffer = Buffer.from(signature, 'hex');
+    
+    if (digestBuffer.length !== signatureBuffer.length) {
+      return false;
+    }
+    
+    return crypto.timingSafeEqual(digestBuffer, signatureBuffer);
   } catch (error) {
     console.error('❌ Webhook signature verification failed:', error);
     return false;
   }
 }
 
-// RevenueCat webhook endpoint
-router.post('/webhook', express.json(), async (req, res) => {
+// RevenueCat webhook endpoint - UPDATED to use raw body
+router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     console.log('🔄 RevenueCat webhook received');
+    
+    // Get raw body as string
+    const rawBody = req.body.toString('utf8');
+    const payload = JSON.parse(rawBody);
     
     // Extract webhook signature and timestamp
     const signature = req.headers['revenuecat-webhook-signature'];
     const timestamp = req.headers['revenuecat-webhook-timestamp'];
-    const payload = req.body;
     
-    // Modify the verification check
+    // Verify signature
     if (process.env.NODE_ENV === 'production' && process.env.REVENUECAT_WEBHOOK_SECRET) {
       const isValid = verifyWebhookSignature(
-        payload,
+        rawBody,
         signature,
         process.env.REVENUECAT_WEBHOOK_SECRET,
-        timestamp // Make sure you're passing timestamp too
+        timestamp
       );
       
       if (!isValid) {
@@ -174,7 +186,7 @@ async function handleCancellation(data) {
 }
 
 async function handleExpiration(data) {
-  console.log(`⏰ EXPIRATION: User ${data.app_user_id}'s subscription expired`);
+  console.log(`⏰ EXPIRATION: User ${data.app_user_id}'s subscription expired');
   
   await updateUserSubscription(data.app_user_id, {
     status: 'expired',
