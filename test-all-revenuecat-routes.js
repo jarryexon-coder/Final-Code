@@ -1,6 +1,11 @@
 // test-all-revenuecat-routes.js
 import axios from 'axios';
 
+// In test-all-revenuecat-routes.js, add more debugging:
+console.log('Environment check:');
+console.log('- REVENUECAT_SERVER_API_KEY exists:', !!process.env.REVENUECAT_SERVER_API_KEY);
+console.log('- REVENUECAT_WEBHOOK_SECRET exists:', !!process.env.REVENUECAT_WEBHOOK_SECRET);
+
 const BASE_URL = 'https://pleasing-determination-production.up.railway.app';
 
 async function testAllRoutes() {
