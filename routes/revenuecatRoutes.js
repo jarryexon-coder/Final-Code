@@ -290,7 +290,7 @@ router.post('/stripe-receipt', express.json(), async (req, res) => {
         headers: {
           'Content-Type': 'application/json',
           'X-Platform': 'stripe',
-          'Authorization': `Bearer ${process.env.REVENUECAT_SERVER_API_KEY}`
+          'Authorization': `Bearer ${process.env.STRIPE_PUBLISHABLE_KEY}`
         }
       }
     );
