@@ -14,11 +14,14 @@ const router = express.Router();
 
 /**
  * Verify webhook signature from RevenueCat
+ * Updated to include timestamp as per RevenueCat documentation
  */
-function verifyWebhookSignature(body, signature, secret) {
+function verifyWebhookSignature(body, signature, secret, timestamp) {
   try {
+    // RevenueCat signature format: HMAC_SHA256(secret, timestamp + '.' + body)
+    const data = timestamp + '.' + JSON.stringify(body);
     const hmac = crypto.createHmac('sha256', secret);
-    const digest = hmac.update(JSON.stringify(body)).digest('hex');
+    const digest = hmac.update(data).digest('hex');
     return signature === digest;
   } catch (error) {
     console.error('❌ Webhook signature verification failed:', error);
@@ -36,12 +39,13 @@ router.post('/webhook', express.json(), async (req, res) => {
     const timestamp = req.headers['revenuecat-webhook-timestamp'];
     const payload = req.body;
     
-    // Verify webhook signature (recommended for production)
+    // Modify the verification check
     if (process.env.NODE_ENV === 'production' && process.env.REVENUECAT_WEBHOOK_SECRET) {
       const isValid = verifyWebhookSignature(
         payload,
         signature,
-        process.env.REVENUECAT_WEBHOOK_SECRET
+        process.env.REVENUECAT_WEBHOOK_SECRET,
+        timestamp // Make sure you're passing timestamp too
       );
       
       if (!isValid) {
@@ -221,7 +225,6 @@ async function handleTransfer(data) {
 // HELPER FUNCTIONS
 // ====================
 
-// >>> INTEGRATED FUNCTION START: Enhanced with connection check from File 1
 async function updateUserSubscription(userId, updates) {
   try {
     // Update in your MongoDB database
@@ -246,7 +249,6 @@ async function updateUserSubscription(userId, updates) {
     console.error(`❌ Failed to update user ${userId}:`, error);
   }
 }
-// <<< INTEGRATED FUNCTION END
 
 async function sendPurchaseNotification(userId, type) {
   // Implement email or push notification
@@ -290,7 +292,7 @@ router.post('/stripe-receipt', express.json(), async (req, res) => {
         headers: {
           'Content-Type': 'application/json',
           'X-Platform': 'stripe',
-          'Authorization': `Bearer ${process.env.STRIPE_PUBLISHABLE_KEY}`
+          'Authorization': `Bearer ${process.env.REVENUECAT_STRIPE_PUBLIC_KEY}`
         }
       }
     );
