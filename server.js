@@ -930,6 +930,8 @@ app.get('/', (req, res) => {
   });
 });
 
+import admin from 'firebase-admin';
+
 // ====================
 // SERVER INITIALIZATION
 // ====================
@@ -937,15 +939,39 @@ const initializeServer = async () => {
   console.log('🚀 Initializing NBA Fantasy AI Backend...');
   
   try {
-    // 1. Connect to MongoDB
+    // 1. Initialize Firebase Admin SDK
+    try {
+      // Check if the environment variable exists and is not empty
+      if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+        console.log('🔧 Initializing Firebase Admin SDK...');
+        
+        // Parse the JSON string from the environment variable
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
+        
+        // Initialize the app with the service account credentials
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+          projectId: serviceAccount.project_id
+        });
+        
+        console.log('✅ Firebase Admin SDK initialized successfully');
+      } else {
+        console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT_KEY not found. Running without Firebase.');
+      }
+    } catch (error) {
+      console.error('❌ Failed to initialize Firebase Admin SDK:', error.message);
+      console.warn('⚠️ Running in mock mode - analytics events will be logged to console only');
+    }
+    
+    // 2. Connect to MongoDB
     await connectDB();
     
-    // 2. Initialize WebSocket server
+    // 3. Initialize WebSocket server
     const wsServer = new WebSocketServer(httpServer);
     app.locals.wsServer = wsServer;
     console.log('✅ WebSocket server initialized');
     
-    // 3. Start the HTTP server with updated app.listen call from File 1
+    // 4. Start the HTTP server with updated app.listen call from File 1
     // ========== START SERVER ==========
     const port = process.env.PORT || 3000;
     httpServer.listen(port, "0.0.0.0", function () {

@@ -1,7 +1,7 @@
 // test-all-revenuecat-routes.js
 import axios from 'axios';
 
-const BASE_URL = 'http://localhost:3002';
+const BASE_URL = 'https://pleasing-determination-production.up.railway.app';
 
 async function testAllRoutes() {
   console.log('🔍 Testing ALL RevenueCat Routes\n');
