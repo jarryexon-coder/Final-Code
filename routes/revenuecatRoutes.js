@@ -17,32 +17,61 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   try {
     console.log('🔄 RevenueCat webhook received');
     
-    // DEBUG: LOG EVERYTHING
-    console.log('🔐 [DEBUG] Received Auth Header:', req.headers['authorization']);
-    console.log('🔐 [DEBUG] Expected Auth Header:', `Bearer ${process.env.REVENUECAT_WEBHOOK_SECRET}`);
-    console.log('🔐 [DEBUG] Full REQ Headers:', JSON.stringify(req.headers, null, 2));
-
-    // 1. Get raw body as string for authorization check
-    const rawBody = req.body.toString('utf8');
+    // DEBUG: Check what type req.body is
+    console.log(`🔍 req.body type: ${typeof req.body}`);
+    console.log(`🔍 Is Buffer: ${Buffer.isBuffer(req.body)}`);
     
-    // 2. Check AUTHORIZATION HEADER (Bearer token)
+    let rawBody;
+    let payload;
+    
+    // Handle both cases: Buffer or already parsed object
+    if (Buffer.isBuffer(req.body)) {
+      // Case 1: express.raw() worked, body is a Buffer
+      rawBody = req.body.toString('utf8');
+      console.log(`📏 Raw body length: ${rawBody.length}`);
+      payload = JSON.parse(rawBody);
+    } else if (typeof req.body === 'object' && req.body !== null) {
+      // Case 2: Some other middleware already parsed it
+      console.log('⚠️ Body already parsed to object');
+      payload = req.body;
+      rawBody = JSON.stringify(req.body);
+    } else {
+      // Case 3: Fallback (string or other)
+      rawBody = String(req.body);
+      payload = JSON.parse(rawBody);
+    }
+    
+    // Log the full payload structure for debugging
+    console.log('🔍 Full payload structure:', JSON.stringify(payload, null, 2));
+    console.log('🔍 Payload keys:', Object.keys(payload));
+    
+    // Extract webhook signature and timestamp
+    const signature = req.headers['revenuecat-webhook-signature'];
+    const timestamp = req.headers['revenuecat-webhook-timestamp'];
+    
+    // Verify signature if in production
+    if (process.env.NODE_ENV === 'production' && process.env.REVENUECAT_WEBHOOK_SECRET) {
+      // Note: Since you're using Authorization header, signature verification might not be needed
+      // But keeping it for reference
+      console.log('🔐 Skipping signature check - using Authorization header instead');
+    }
+    
+    // Check AUTHORIZATION HEADER (this is what you configured)
     const authHeader = req.headers['authorization'];
-    const expectedSecret = process.env.REVENUECAT_WEBHOOK_SECRET; // Should be 'RC_WhSec_...'
-    const expectedHeader = `Bearer ${expectedSecret}`;
+    const expectedHeader = `Bearer ${process.env.REVENUECAT_WEBHOOK_SECRET}`;
+    
+    console.log(`🔐 [DEBUG] Received Auth Header: "${authHeader}"`);
+    console.log(`🔐 [DEBUG] Expected Auth Header: "${expectedHeader}"`);
     
     // === ADDED ENHANCED DEBUG LINES ===
     console.log('🔐 [DEBUG WEBHOOK AUTH]');
-    console.log('Received Header:', `"${authHeader}"`);
-    console.log('Expected Header:', `"${expectedHeader}"`);
-    console.log('Secret from Env exists?:', !!expectedSecret);
+    console.log('Secret from Env exists?:', !!process.env.REVENUECAT_WEBHOOK_SECRET);
     console.log('NODE_ENV:', process.env.NODE_ENV);
     // ===================================
     
-    // 3. Validate in production
-    if (process.env.NODE_ENV === 'production' && expectedSecret) {
+    if (process.env.NODE_ENV === 'production') {
       if (authHeader !== expectedHeader) {
-        console.error('❌ Webhook auth failed. Received:', authHeader);
-        console.error('❌ Expected:', expectedHeader);
+        console.error('❌ Invalid webhook authorization');
         return res.status(401).json({ success: false, error: 'Invalid authorization' });
       }
     } else {
@@ -50,67 +79,164 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       console.log('🔐 Auth Header (Dev):', authHeader);
     }
     
-    // 4. ONLY NOW parse the raw body to JSON
-    const payload = JSON.parse(rawBody);
-    console.log('✅ Webhook received:', payload.type);
-    console.log('📝 Payload:', JSON.stringify(payload, null, 2));
+    // Check for different possible event type locations
+    let eventType;
+    let eventData;
+    
+    // Try different possible event type locations based on RevenueCat documentation
+    if (payload.type) {
+      // New format: { type: 'INITIAL_PURCHASE', data: {...} }
+      eventType = payload.type;
+      eventData = payload.data;
+    } else if (payload.event) {
+      // Alternative format: { event: { type: 'INITIAL_PURCHASE', ... } }
+      eventType = payload.event.type;
+      eventData = payload.event;
+    } else if (payload.event_type) {
+      // Another possible format
+      eventType = payload.event_type;
+      eventData = payload;
+    } else {
+      console.error('❌ Could not find event type in payload');
+      console.log('📝 Full payload:', JSON.stringify(payload, null, 2));
+      
+      // Still return 200 to prevent retries
+      return res.status(200).json({
+        success: false,
+        error: 'No event type found in payload',
+        note: 'Payload was received but no event type could be extracted'
+      });
+    }
+    
+    console.log('✅ Auth passed. Webhook Type:', eventType);
+    console.log('📝 Event Data:', JSON.stringify(eventData, null, 2));
     
     // Process different webhook types
-    const eventType = payload.type;
-    const eventData = payload.data;
-    
     switch (eventType) {
       case 'INITIAL_PURCHASE':
+      case 'initial_purchase':
         await handleInitialPurchase(eventData);
         break;
         
       case 'RENEWAL':
+      case 'renewal':
         await handleRenewal(eventData);
         break;
         
       case 'CANCELLATION':
+      case 'cancellation':
         await handleCancellation(eventData);
         break;
         
       case 'EXPIRATION':
+      case 'expiration':
         await handleExpiration(eventData);
         break;
         
       case 'UNCANCELLATION':
+      case 'uncancellation':
         await handleUncancellation(eventData);
         break;
         
       case 'BILLING_ISSUE':
+      case 'billing_issue':
         await handleBillingIssue(eventData);
         break;
         
       case 'PRODUCT_CHANGE':
+      case 'product_change':
         await handleProductChange(eventData);
         break;
         
       case 'TRANSFER':
+      case 'transfer':
         await handleTransfer(eventData);
         break;
         
       case 'TEST':
+      case 'test':
         console.log('🧪 Test webhook received - all good!');
+        break;
+        
+      case 'NON_RENEWING_PURCHASE':
+      case 'non_renewing_purchase':
+        console.log('🛍️ Non-renewing purchase received');
+        await handleInitialPurchase(eventData); // Treat like initial purchase
+        break;
+        
+      case 'SUBSCRIPTION_PAUSED':
+      case 'subscription_paused':
+        console.log('⏸️ Subscription paused');
+        // Handle as a special type of cancellation
+        await updateUserSubscription(eventData?.app_user_id, {
+          status: 'paused',
+          pausedAt: new Date()
+        });
         break;
         
       default:
         console.log(`⚠️ Unhandled webhook type: ${eventType}`);
+        console.log('📝 Full event data:', JSON.stringify(eventData, null, 2));
     }
     
-    // Log analytics event
-    await firebaseAnalyticsService.logEvent(
-      eventData?.app_user_id || 'unknown',
-      `revenuecat_${eventType.toLowerCase()}`,
-      {
-        product_id: eventData?.product_id,
-        price: eventData?.price,
-        currency: eventData?.currency,
-        environment: eventData?.environment
-      }
-    );
+    // === UPDATED: Log analytics event with safety checks (from File 1) ===
+    try {
+      // Extract user ID from multiple possible locations
+      const userId = eventData?.original_app_user_id || 
+                     eventData?.app_user_id || 
+                     eventData?.user_id || 
+                     eventData?.customer_info?.original_app_user_id || 
+                     'unknown';
+      
+      // Extract product ID - TEST events don't have this
+      const productId = eventData?.product_id || 'test_product';
+      
+      // Extract price - TEST events don't have this
+      const price = eventData?.price || eventData?.price_in_purchased_currency || null;
+      
+      // Extract currency - TEST events don't have this
+      const currency = eventData?.currency || null;
+      
+      // Extract environment
+      const environment = eventData?.environment || 'production';
+      
+      // Ensure eventType is a string before calling toLowerCase()
+      const safeEventType = (eventType || 'unknown').toString().toLowerCase();
+      
+      console.log(`📝 Analytics Data: User: ${userId}, Event: ${safeEventType}, Product: ${productId}`);
+      
+      await firebaseAnalyticsService.logEvent(
+        userId,
+        `revenuecat_${safeEventType}`,
+        {
+          product_id: productId,
+          price: price,
+          currency: currency,
+          environment: environment,
+          raw_event_type: eventType,
+          user_id: userId,
+          timestamp: new Date().toISOString(),
+          platform: 'backend_api'
+        }
+      );
+    } catch (analyticsError) {
+      console.error('❌ Analytics logging error:', analyticsError.message);
+      // Don't fail the webhook because of analytics error
+      console.log('📝 Analytics Event (Firebase not initialized or error):', {
+        name: `revenuecat_${(eventType || 'unknown').toString().toLowerCase()}`,
+        params: {
+          product_id: eventData?.product_id || 'test_product',
+          price: eventData?.price || null,
+          environment: eventData?.environment || 'production',
+          raw_event_type: eventType,
+          user_id: eventData?.original_app_user_id || eventData?.app_user_id || 'unknown',
+          timestamp: new Date().toISOString(),
+          platform: 'backend_api'
+        },
+        timestamp: new Date().toISOString()
+      });
+    }
+    // === END OF UPDATED ANALYTICS CODE ===
     
     // Always return 200 to acknowledge receipt
     res.status(200).json({ 
@@ -120,10 +246,14 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     });
     
   } catch (error) {
-    console.error('❌ Webhook processing error:', error);
+    console.error('❌ Webhook processing error:', error.message);
+    console.error('❌ Error stack:', error.stack);
+    console.error('❌ Raw request body (first 500 chars):', req.body?.toString?.()?.substring?.(0, 500) || req.body);
+    
     res.status(500).json({ 
       success: false, 
       error: error.message,
+      note: 'Check if req.body is already parsed',
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
@@ -233,89 +363,163 @@ router.post('/validate-apple-receipt', express.json(), async (req, res) => {
 });
 
 // ====================
-// WEBHOOK HANDLERS (Keep existing handlers)
+// WEBHOOK HANDLERS (Updated with more robust error handling)
 // ====================
 
 async function handleInitialPurchase(data) {
-  console.log(`💰 INITIAL PURCHASE: User ${data.app_user_id} purchased ${data.product_id}`);
-  
-  await updateUserSubscription(data.app_user_id, {
-    status: 'active',
-    productId: data.product_id,
-    purchaseDate: new Date(data.purchased_at_ms),
-    expiresDate: data.expires_at_ms ? new Date(data.expires_at_ms) : null,
-    environment: data.environment,
-    store: data.store
-  });
-  
-  await sendPurchaseNotification(data.app_user_id, 'initial_purchase');
+  try {
+    console.log(`💰 INITIAL PURCHASE: User ${data.app_user_id} purchased ${data.product_id}`);
+    
+    const userId = data.app_user_id || data.user_id || data.customer_info?.original_app_user_id;
+    if (!userId) {
+      console.error('❌ No user ID found in purchase data');
+      return;
+    }
+    
+    await updateUserSubscription(userId, {
+      status: 'active',
+      productId: data.product_id,
+      purchaseDate: new Date(data.purchased_at_ms || data.purchase_date_ms || Date.now()),
+      expiresDate: data.expires_at_ms ? new Date(data.expires_at_ms) : null,
+      environment: data.environment || 'production',
+      store: data.store || 'unknown'
+    });
+    
+    await sendPurchaseNotification(userId, 'initial_purchase');
+  } catch (error) {
+    console.error('❌ Error handling initial purchase:', error);
+  }
 }
 
 async function handleRenewal(data) {
-  console.log(`🔄 RENEWAL: User ${data.app_user_id} renewed ${data.product_id}`);
-  
-  await updateUserSubscription(data.app_user_id, {
-    status: 'active',
-    lastRenewal: new Date(),
-    expiresDate: data.expires_at_ms ? new Date(data.expires_at_ms) : null
-  });
+  try {
+    console.log(`🔄 RENEWAL: User ${data.app_user_id} renewed ${data.product_id}`);
+    
+    const userId = data.app_user_id || data.user_id || data.customer_info?.original_app_user_id;
+    if (!userId) {
+      console.error('❌ No user ID found in renewal data');
+      return;
+    }
+    
+    await updateUserSubscription(userId, {
+      status: 'active',
+      lastRenewal: new Date(),
+      expiresDate: data.expires_at_ms ? new Date(data.expires_at_ms) : null
+    });
+  } catch (error) {
+    console.error('❌ Error handling renewal:', error);
+  }
 }
 
 async function handleCancellation(data) {
-  console.log(`❌ CANCELLATION: User ${data.app_user_id} cancelled ${data.product_id}`);
-  
-  await updateUserSubscription(data.app_user_id, {
-    status: 'cancelled',
-    cancelledAt: new Date(),
-    cancellationReason: data.cancellation_reason,
-    expiresDate: data.expires_at_ms ? new Date(data.expires_at_ms) : null
-  });
+  try {
+    console.log(`❌ CANCELLATION: User ${data.app_user_id} cancelled ${data.product_id}`);
+    
+    const userId = data.app_user_id || data.user_id || data.customer_info?.original_app_user_id;
+    if (!userId) {
+      console.error('❌ No user ID found in cancellation data');
+      return;
+    }
+    
+    await updateUserSubscription(userId, {
+      status: 'cancelled',
+      cancelledAt: new Date(),
+      cancellationReason: data.cancellation_reason,
+      expiresDate: data.expires_at_ms ? new Date(data.expires_at_ms) : null
+    });
+  } catch (error) {
+    console.error('❌ Error handling cancellation:', error);
+  }
 }
 
 async function handleExpiration(data) {
-  console.log(`⏰ EXPIRATION: User ${data.app_user_id}'s subscription expired`);
-  
-  await updateUserSubscription(data.app_user_id, {
-    status: 'expired',
-    expiredAt: new Date()
-  });
+  try {
+    console.log(`⏰ EXPIRATION: User ${data.app_user_id}'s subscription expired`);
+    
+    const userId = data.app_user_id || data.user_id || data.customer_info?.original_app_user_id;
+    if (!userId) {
+      console.error('❌ No user ID found in expiration data');
+      return;
+    }
+    
+    await updateUserSubscription(userId, {
+      status: 'expired',
+      expiredAt: new Date()
+    });
+  } catch (error) {
+    console.error('❌ Error handling expiration:', error);
+  }
 }
 
 async function handleUncancellation(data) {
-  console.log(`✅ UNCANCELLATION: User ${data.app_user_id} uncancelled`);
-  
-  await updateUserSubscription(data.app_user_id, {
-    status: 'active',
-    uncancelledAt: new Date(),
-    expiresDate: data.expires_at_ms ? new Date(data.expires_at_ms) : null
-  });
+  try {
+    console.log(`✅ UNCANCELLATION: User ${data.app_user_id} uncancelled`);
+    
+    const userId = data.app_user_id || data.user_id || data.customer_info?.original_app_user_id;
+    if (!userId) {
+      console.error('❌ No user ID found in uncancellation data');
+      return;
+    }
+    
+    await updateUserSubscription(userId, {
+      status: 'active',
+      uncancelledAt: new Date(),
+      expiresDate: data.expires_at_ms ? new Date(data.expires_at_ms) : null
+    });
+  } catch (error) {
+    console.error('❌ Error handling uncancellation:', error);
+  }
 }
 
 async function handleBillingIssue(data) {
-  console.log(`⚠️ BILLING ISSUE: User ${data.app_user_id} has billing issue`);
-  
-  await updateUserSubscription(data.app_user_id, {
-    hasBillingIssue: true,
-    billingIssueDetectedAt: new Date()
-  });
-  
-  await sendBillingIssueNotification(data.app_user_id);
+  try {
+    console.log(`⚠️ BILLING ISSUE: User ${data.app_user_id} has billing issue`);
+    
+    const userId = data.app_user_id || data.user_id || data.customer_info?.original_app_user_id;
+    if (!userId) {
+      console.error('❌ No user ID found in billing issue data');
+      return;
+    }
+    
+    await updateUserSubscription(userId, {
+      hasBillingIssue: true,
+      billingIssueDetectedAt: new Date()
+    });
+    
+    await sendBillingIssueNotification(userId);
+  } catch (error) {
+    console.error('❌ Error handling billing issue:', error);
+  }
 }
 
 async function handleProductChange(data) {
-  console.log(`🔄 PRODUCT CHANGE: User ${data.app_user_id} changed from ${data.old_product_id} to ${data.new_product_id}`);
-  
-  await updateUserSubscription(data.app_user_id, {
-    productId: data.new_product_id,
-    previousProductId: data.old_product_id,
-    changedAt: new Date()
-  });
+  try {
+    console.log(`🔄 PRODUCT CHANGE: User ${data.app_user_id} changed from ${data.old_product_id} to ${data.new_product_id}`);
+    
+    const userId = data.app_user_id || data.user_id || data.customer_info?.original_app_user_id;
+    if (!userId) {
+      console.error('❌ No user ID found in product change data');
+      return;
+    }
+    
+    await updateUserSubscription(userId, {
+      productId: data.new_product_id,
+      previousProductId: data.old_product_id,
+      changedAt: new Date()
+    });
+  } catch (error) {
+    console.error('❌ Error handling product change:', error);
+  }
 }
 
 async function handleTransfer(data) {
-  console.log(`🔀 TRANSFER: User ${data.new_app_user_id} transferred from ${data.previous_app_user_id}`);
-  
-  await transferUserData(data.previous_app_user_id, data.new_app_user_id);
+  try {
+    console.log(`🔀 TRANSFER: User ${data.new_app_user_id} transferred from ${data.previous_app_user_id}`);
+    
+    await transferUserData(data.previous_app_user_id, data.new_app_user_id);
+  } catch (error) {
+    console.error('❌ Error handling transfer:', error);
+  }
 }
 
 // ====================
