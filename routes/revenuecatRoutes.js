@@ -9,66 +9,36 @@ import firebaseAnalyticsService from '../services/firebaseAnalyticsService.js';
 const router = express.Router();
 
 // ====================
-// REVENUECAT WEBHOOK ENDPOINT (Stripe Integration)
+// REVENUECAT WEBHOOK ENDPOINT (Updated with Bearer Authorization)
 // ====================
 
-/**
- * Verify webhook signature from RevenueCat
- * Updated to include timestamp as per RevenueCat documentation
- */
-function verifyWebhookSignature(rawBody, signature, secret, timestamp) {
-  try {
-    // RevenueCat signature format: HMAC_SHA256(secret, timestamp + '.' + rawBody)
-    const data = timestamp + '.' + rawBody;
-    const hmac = crypto.createHmac('sha256', secret);
-    const digest = hmac.update(data).digest('hex');
-    
-    // Use timing-safe comparison
-    const digestBuffer = Buffer.from(digest, 'hex');
-    const signatureBuffer = Buffer.from(signature, 'hex');
-    
-    if (digestBuffer.length !== signatureBuffer.length) {
-      return false;
-    }
-    
-    return crypto.timingSafeEqual(digestBuffer, signatureBuffer);
-  } catch (error) {
-    console.error('❌ Webhook signature verification failed:', error);
-    return false;
-  }
-}
-
-// RevenueCat webhook endpoint
+// RevenueCat webhook endpoint - Updated to use Bearer Authorization header
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     console.log('🔄 RevenueCat webhook received');
     
-    // Get raw body as string
+    // 1. Get raw body as string for authorization check
     const rawBody = req.body.toString('utf8');
-    const payload = JSON.parse(rawBody);
     
-    // Extract webhook signature and timestamp
-    const signature = req.headers['revenuecat-webhook-signature'];
-    const timestamp = req.headers['revenuecat-webhook-timestamp'];
+    // 2. Check AUTHORIZATION HEADER (Bearer token)
+    const authHeader = req.headers['authorization'];
+    const yourWebhookSecret = process.env.REVENUECAT_WEBHOOK_SECRET; // Should be 'RC_WhSec_...'
+    const expectedHeader = `Bearer ${yourWebhookSecret}`;
     
-    // Verify signature using WEBHOOK SECRET (not Apple shared secret!)
-    if (process.env.NODE_ENV === 'production' && process.env.REVENUECAT_WEBHOOK_SECRET) {
-      const isValid = verifyWebhookSignature(
-        rawBody,
-        signature,
-        process.env.REVENUECAT_WEBHOOK_SECRET, // Use webhook secret here
-        timestamp
-      );
-      
-      if (!isValid) {
-        console.error('❌ Invalid webhook signature');
-        return res.status(401).json({ success: false, error: 'Invalid signature' });
+    // 3. Validate in production
+    if (process.env.NODE_ENV === 'production') {
+      if (authHeader !== expectedHeader) {
+        console.error('❌ Webhook auth failed. Received:', authHeader);
+        return res.status(401).json({ success: false, error: 'Invalid authorization' });
       }
-    } else if (process.env.NODE_ENV === 'production') {
-      console.warn('⚠️ REVENUECAT_WEBHOOK_SECRET not set in production!');
+    } else {
+      // In development, just log what we got
+      console.log('🔐 Auth Header (Dev):', authHeader);
     }
     
-    console.log('📋 Webhook Type:', payload.type);
+    // 4. ONLY NOW parse the raw body to JSON
+    const payload = JSON.parse(rawBody);
+    console.log('✅ Webhook received:', payload.type);
     console.log('📝 Payload:', JSON.stringify(payload, null, 2));
     
     // Process different webhook types
@@ -141,6 +111,59 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       success: false, 
       error: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// ====================
+// STRIPE RECEIPTS ENDPOINT (For Stripe → RevenueCat) - Updated with correct key
+// ====================
+
+router.post('/stripe-receipt', express.json(), async (req, res) => {
+  try {
+    const { app_user_id, fetch_token } = req.body;
+    
+    if (!app_user_id || !fetch_token) {
+      return res.status(400).json({ success: false, error: 'Missing fields' });
+    }
+    
+    // KEY CHANGE: Use the REVENUECAT_STRIPE_PUBLIC_KEY (rcb_...)
+    const revenuecatStripeKey = process.env.REVENUECAT_STRIPE_PUBLIC_KEY || process.env.STRIPE_PUBLISHABLE_KEY;
+    
+    if (!revenuecatStripeKey) {
+      console.error('❌ Missing RevenueCat Stripe key');
+      return res.status(500).json({
+        success: false,
+        error: 'Server configuration error: Missing Stripe key'
+      });
+    }
+    
+    const response = await axios.post(
+      'https://api.revenuecat.com/v1/receipts',
+      { app_user_id, fetch_token },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Platform': 'stripe',
+          'Authorization': `Bearer ${revenuecatStripeKey}` // Use rcb_ key here
+        }
+      }
+    );
+    
+    console.log('✅ Stripe receipt forwarded to RevenueCat');
+    
+    res.status(200).json({ 
+      success: true, 
+      data: response.data,
+      message: 'Stripe receipt processed successfully'
+    });
+    
+  } catch (error) {
+    console.error('❌ Stripe receipt error:', error.response?.data || error.message);
+    res.status(502).json({
+      success: false,
+      error: 'Failed to forward to RevenueCat API',
+      details: error.response?.data || error.message
     });
   }
 });
@@ -329,7 +352,7 @@ router.get('/health', async (req, res) => {
   const hasApiKey = !!process.env.REVENUECAT_SERVER_API_KEY;
   const hasAppleSecret = !!process.env.REVENUECAT_APPLE_SHARED_SECRET;
   const hasWebhookSecret = !!process.env.REVENUECAT_WEBHOOK_SECRET;
-  const hasStripeKey = !!process.env.STRIPE_SECRET_KEY;
+  const hasStripeKey = !!process.env.REVENUECAT_STRIPE_PUBLIC_KEY || !!process.env.STRIPE_PUBLISHABLE_KEY;
   
   res.status(200).json({
     success: true,
@@ -341,7 +364,7 @@ router.get('/health', async (req, res) => {
       revenuecat_api_key_configured: hasApiKey,
       apple_shared_secret_configured: hasAppleSecret,
       webhook_secret_configured: hasWebhookSecret,
-      stripe_configured: hasStripeKey
+      stripe_public_key_configured: hasStripeKey
     },
     endpoints: {
       webhook: '/api/revenuecat/webhook',
@@ -356,53 +379,6 @@ router.get('/health', async (req, res) => {
 // ====================
 // EXISTING ENDPOINTS (Keep existing)
 // ====================
-
-router.post('/stripe-receipt', express.json(), async (req, res) => {
-  // Keep existing stripe-receipt endpoint code
-  try {
-    console.log('💰 Processing Stripe receipt for RevenueCat');
-    
-    const { app_user_id, fetch_token } = req.body;
-    
-    if (!app_user_id || !fetch_token) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing app_user_id or fetch_token'
-      });
-    }
-    
-    const response = await axios.post(
-      'https://api.revenuecat.com/v1/receipts',
-      {
-        app_user_id,
-        fetch_token
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Platform': 'stripe',
-          'Authorization': `Bearer ${process.env.REVENUECAT_SERVER_API_KEY}`
-        }
-      }
-    );
-    
-    console.log('✅ Stripe receipt forwarded to RevenueCat');
-    
-    res.status(200).json({
-      success: true,
-      data: response.data,
-      message: 'Stripe receipt processed successfully'
-    });
-    
-  } catch (error) {
-    console.error('❌ Stripe receipt error:', error.response?.data || error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to process Stripe receipt',
-      details: error.response?.data || error.message
-    });
-  }
-});
 
 router.get('/validate/:userId', async (req, res) => {
   // Keep existing validate endpoint code
