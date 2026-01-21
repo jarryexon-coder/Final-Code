@@ -38,7 +38,7 @@ function verifyWebhookSignature(rawBody, signature, secret, timestamp) {
   }
 }
 
-// RevenueCat webhook endpoint - UPDATED to use raw body
+// RevenueCat webhook endpoint
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   try {
     console.log('🔄 RevenueCat webhook received');
@@ -51,12 +51,12 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     const signature = req.headers['revenuecat-webhook-signature'];
     const timestamp = req.headers['revenuecat-webhook-timestamp'];
     
-    // Verify signature
+    // Verify signature using WEBHOOK SECRET (not Apple shared secret!)
     if (process.env.NODE_ENV === 'production' && process.env.REVENUECAT_WEBHOOK_SECRET) {
       const isValid = verifyWebhookSignature(
         rawBody,
         signature,
-        process.env.REVENUECAT_WEBHOOK_SECRET,
+        process.env.REVENUECAT_WEBHOOK_SECRET, // Use webhook secret here
         timestamp
       );
       
@@ -64,6 +64,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         console.error('❌ Invalid webhook signature');
         return res.status(401).json({ success: false, error: 'Invalid signature' });
       }
+    } else if (process.env.NODE_ENV === 'production') {
+      console.warn('⚠️ REVENUECAT_WEBHOOK_SECRET not set in production!');
     }
     
     console.log('📋 Webhook Type:', payload.type);
@@ -144,13 +146,62 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 });
 
 // ====================
-// WEBHOOK HANDLERS
+// APPLE RECEIPT VALIDATION ENDPOINT (Uses Apple Shared Secret)
+// ====================
+
+/**
+ * Endpoint to validate Apple receipts using Apple Shared Secret
+ * This is separate from webhook verification
+ */
+router.post('/validate-apple-receipt', express.json(), async (req, res) => {
+  try {
+    const { receipt_data } = req.body;
+    
+    if (!receipt_data) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing receipt_data' 
+      });
+    }
+    
+    // Validate with Apple App Store using Apple Shared Secret
+    const appleResponse = await axios.post(
+      'https://buy.itunes.apple.com/verifyReceipt', // Sandbox: https://sandbox.itunes.apple.com/verifyReceipt
+      {
+        'receipt-data': receipt_data,
+        'password': process.env.REVENUECAT_APPLE_SHARED_SECRET || process.env.APPLE_SHARED_SECRET, // Use Apple shared secret here
+        'exclude-old-transactions': true
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    res.status(200).json({
+      success: true,
+      data: appleResponse.data,
+      message: 'Apple receipt validated'
+    });
+    
+  } catch (error) {
+    console.error('❌ Apple receipt validation error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to validate Apple receipt',
+      details: error.message
+    });
+  }
+});
+
+// ====================
+// WEBHOOK HANDLERS (Keep existing handlers)
 // ====================
 
 async function handleInitialPurchase(data) {
   console.log(`💰 INITIAL PURCHASE: User ${data.app_user_id} purchased ${data.product_id}`);
   
-  // Update user in your database
   await updateUserSubscription(data.app_user_id, {
     status: 'active',
     productId: data.product_id,
@@ -160,7 +211,6 @@ async function handleInitialPurchase(data) {
     store: data.store
   });
   
-  // Send welcome email or notification
   await sendPurchaseNotification(data.app_user_id, 'initial_purchase');
 }
 
@@ -212,7 +262,6 @@ async function handleBillingIssue(data) {
     billingIssueDetectedAt: new Date()
   });
   
-  // Send billing issue notification
   await sendBillingIssueNotification(data.app_user_id);
 }
 
@@ -229,17 +278,15 @@ async function handleProductChange(data) {
 async function handleTransfer(data) {
   console.log(`🔀 TRANSFER: User ${data.new_app_user_id} transferred from ${data.previous_app_user_id}`);
   
-  // Handle user ID transfer
   await transferUserData(data.previous_app_user_id, data.new_app_user_id);
 }
 
 // ====================
-// HELPER FUNCTIONS
+// HELPER FUNCTIONS (Keep existing)
 // ====================
 
 async function updateUserSubscription(userId, updates) {
   try {
-    // Update in your MongoDB database
     if (mongoose.connection.readyState === 1) {
       const db = mongoose.connection.db;
       await db.collection('users').updateOne(
@@ -263,7 +310,6 @@ async function updateUserSubscription(userId, updates) {
 }
 
 async function sendPurchaseNotification(userId, type) {
-  // Implement email or push notification
   console.log(`📧 Sent ${type} notification to user: ${userId}`);
 }
 
@@ -273,14 +319,46 @@ async function sendBillingIssueNotification(userId) {
 
 async function transferUserData(oldUserId, newUserId) {
   console.log(`🔀 Transferring data from ${oldUserId} to ${newUserId}`);
-  // Implement data transfer logic
 }
 
 // ====================
-// STRIPE RECEIPTS ENDPOINT (For Stripe → RevenueCat)
+// HEALTH CHECK (Updated)
+// ====================
+
+router.get('/health', async (req, res) => {
+  const hasApiKey = !!process.env.REVENUECAT_SERVER_API_KEY;
+  const hasAppleSecret = !!process.env.REVENUECAT_APPLE_SHARED_SECRET;
+  const hasWebhookSecret = !!process.env.REVENUECAT_WEBHOOK_SECRET;
+  const hasStripeKey = !!process.env.STRIPE_SECRET_KEY;
+  
+  res.status(200).json({
+    success: true,
+    service: 'RevenueCat Integration',
+    status: 'operational',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    configuration: {
+      revenuecat_api_key_configured: hasApiKey,
+      apple_shared_secret_configured: hasAppleSecret,
+      webhook_secret_configured: hasWebhookSecret,
+      stripe_configured: hasStripeKey
+    },
+    endpoints: {
+      webhook: '/api/revenuecat/webhook',
+      validate: '/api/revenuecat/validate/:userId',
+      stripe_receipt: '/api/revenuecat/stripe-receipt',
+      plans: '/api/revenuecat/plans',
+      apple_receipt_validation: '/api/revenuecat/validate-apple-receipt'
+    }
+  });
+});
+
+// ====================
+// EXISTING ENDPOINTS (Keep existing)
 // ====================
 
 router.post('/stripe-receipt', express.json(), async (req, res) => {
+  // Keep existing stripe-receipt endpoint code
   try {
     console.log('💰 Processing Stripe receipt for RevenueCat');
     
@@ -293,7 +371,6 @@ router.post('/stripe-receipt', express.json(), async (req, res) => {
       });
     }
     
-    // Forward to RevenueCat API
     const response = await axios.post(
       'https://api.revenuecat.com/v1/receipts',
       {
@@ -304,7 +381,7 @@ router.post('/stripe-receipt', express.json(), async (req, res) => {
         headers: {
           'Content-Type': 'application/json',
           'X-Platform': 'stripe',
-          'Authorization': `Bearer ${process.env.REVENUECAT_STRIPE_PUBLIC_KEY}`
+          'Authorization': `Bearer ${process.env.REVENUECAT_SERVER_API_KEY}`
         }
       }
     );
@@ -327,16 +404,12 @@ router.post('/stripe-receipt', express.json(), async (req, res) => {
   }
 });
 
-// ====================
-// VALIDATE SUBSCRIPTION
-// ====================
-
 router.get('/validate/:userId', async (req, res) => {
+  // Keep existing validate endpoint code
   try {
     const { userId } = req.params;
     console.log(`🔍 Validating subscription for user: ${userId}`);
     
-    // Use RevenueCat API to validate
     const response = await axios.get(
       `https://api.revenuecat.com/v1/subscribers/${userId}`,
       {
@@ -350,7 +423,6 @@ router.get('/validate/:userId', async (req, res) => {
     const subscriber = response.data;
     const entitlements = subscriber.subscriber.entitlements || {};
     
-    // Check for active entitlements
     const activeEntitlements = Object.values(entitlements).filter(
       entitlement => entitlement.expires_date === null || 
       new Date(entitlement.expires_date) > new Date()
@@ -372,7 +444,6 @@ router.get('/validate/:userId', async (req, res) => {
   } catch (error) {
     console.error('❌ Subscription validation error:', error.message);
     
-    // Fallback to mock data for testing
     res.status(200).json({
       success: true,
       data: {
@@ -383,7 +454,7 @@ router.get('/validate/:userId', async (req, res) => {
           status: 'active',
           renewalDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
           paymentMethod: 'stripe',
-          productId: 'prod_TpBYfFNjgIjtvi' // From your logs
+          productId: 'prod_TpBYfFNjgIjtvi'
         },
         note: 'Mock data - set REVENUECAT_SERVER_API_KEY for real validation'
       }
@@ -391,14 +462,9 @@ router.get('/validate/:userId', async (req, res) => {
   }
 });
 
-// ====================
-// GET SUBSCRIPTION PLANS
-// ====================
-
 router.get('/plans', async (req, res) => {
+  // Keep existing plans endpoint code
   try {
-    // In production, fetch from RevenueCat or Stripe
-    // For now, return mock plans
     const plans = {
       weekly: {
         id: 'weekly',
@@ -439,34 +505,6 @@ router.get('/plans', async (req, res) => {
     console.error('❌ Get plans error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
-});
-
-// ====================
-// HEALTH CHECK
-// ====================
-
-router.get('/health', async (req, res) => {
-  const hasApiKey = !!process.env.REVENUECAT_SERVER_API_KEY;
-  const hasStripeKey = !!process.env.STRIPE_SECRET_KEY;
-  
-  res.status(200).json({
-    success: true,
-    service: 'RevenueCat Integration',
-    status: 'operational',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    configuration: {
-      revenuecat_configured: hasApiKey,
-      stripe_configured: hasStripeKey,
-      webhook_secret_configured: !!process.env.REVENUECAT_WEBHOOK_SECRET
-    },
-    endpoints: {
-      webhook: '/api/revenuecat/webhook',
-      validate: '/api/revenuecat/validate/:userId',
-      stripe_receipt: '/api/revenuecat/stripe-receipt',
-      plans: '/api/revenuecat/plans'
-    }
-  });
 });
 
 export default router;
