@@ -56,12 +56,10 @@ const PORT = process.env.PORT || 3002;
 const HOST = process.env.HOST || '0.0.0.0';
 
 // ====================
-// CRITICAL: BODY PARSERS MUST BE FIRST!
+// CRITICAL: REMOVE GLOBAL JSON PARSER HERE
 // ====================
-app.use(express.json()); // Parse JSON bodies
-app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
-
-console.log('✅ Body parsers initialized');
+// DO NOT USE app.use(express.json()) here globally
+// We'll apply it selectively to specific routes
 
 // ====================
 // CORS MIDDLEWARE (Updated per File 1)
@@ -86,11 +84,27 @@ app.use(cors({
 console.log('✅ CORS middleware configured with allowed origins:', allowedOrigins);
 
 // ====================
+// CREATE SEPARATE ROUTERS WITH THEIR OWN PARSERS
+// ====================
+
+// Create a router for routes that need JSON parsing
+const jsonRouter = express.Router();
+jsonRouter.use(express.json()); // Apply JSON parsing only to this router
+jsonRouter.use(express.urlencoded({ extended: true }));
+
+// Create a router for routes that need raw body access (like webhook)
+const webhookRouter = express.Router();
+// Note: We won't add any body parser here - the raw parsing will be handled
+// in the individual route within revenuecatRoutes.js
+
+console.log('✅ Created separate routers for JSON and webhook routes');
+
+// ====================
 // REVENUECAT DIRECT ROUTES - ADDED TO FIX MISSING ENDPOINTS
 // ====================
 
 // Health check - ADDED TO FIX 404
-app.get('/api/revenuecat/health', (req, res) => {
+jsonRouter.get('/api/revenuecat/health', (req, res) => {
   console.log('🔍 RevenueCat health check (direct route)');
   res.status(200).json({
     success: true,
@@ -114,7 +128,7 @@ app.get('/api/revenuecat/health', (req, res) => {
 });
 
 // Stripe receipt endpoint - ADDED TO FIX 404
-app.post('/api/revenuecat/stripe-receipt', async (req, res) => {
+jsonRouter.post('/api/revenuecat/stripe-receipt', async (req, res) => {
   try {
     console.log('💰 Stripe receipt received (direct route)');
     
@@ -189,7 +203,7 @@ app.post('/api/revenuecat/stripe-receipt', async (req, res) => {
 });
 
 // Plans endpoint - ADDED TO FIX 404
-app.get('/api/revenuecat/plans', (req, res) => {
+jsonRouter.get('/api/revenuecat/plans', (req, res) => {
   console.log('📋 Fetching subscription plans (direct route)');
   res.status(200).json({
     success: true,
@@ -224,7 +238,7 @@ app.get('/api/revenuecat/plans', (req, res) => {
 });
 
 // Validate subscription endpoint - ADDED TO FIX 404
-app.get('/api/revenuecat/validate/:userId', (req, res) => {
+jsonRouter.get('/api/revenuecat/validate/:userId', (req, res) => {
   const { userId } = req.params;
   console.log(`🔍 Validating subscription for ${userId} (direct route)`);
   
@@ -480,10 +494,15 @@ try {
 // MOUNT ROUTES (Updated per File 1)
 // ====================
 
+// FIRST: Mount the jsonRouter (which has express.json() middleware)
+app.use('/', jsonRouter);
+
 // Mount RevenueCat routes BEFORE other routes to ensure they're not overridden
+// This allows the revenuecatRoutes.js to handle raw body parsing for webhook
 app.use('/api/revenuecat', revenuecatRoutes);
 
-// Mount other routes
+// Mount other routes (they will use the default app instance without JSON parsing)
+// These routes should be updated to use jsonRouter if they need JSON parsing
 app.use('/api/nba', nbaRoutes);       // This should handle /api/nba/teams
 app.use('/api/games', liveGamesRoutes); // This should handle /api/games
 app.use('/api/news', newsRoutes);
@@ -512,7 +531,7 @@ app.use('/api/premium', authenticateToken, premiumRoutes);
 // ====================
 // HEALTH CHECK ENDPOINTS
 // ====================
-app.get('/health', async (req, res) => {
+jsonRouter.get('/health', async (req, res) => {
   const mongoState = mongoose.connection.readyState;
   const mongoStatus = mongoState === 1 ? 'connected' : 'disconnected';
   
@@ -551,7 +570,7 @@ app.get('/health', async (req, res) => {
 });
 
 // Add: /api/health route (per File 1)
-app.get('/api/health', async (req, res) => {
+jsonRouter.get('/api/health', async (req, res) => {
   res.status(200).json({
     status: 'healthy',
     service: 'NBA Fantasy AI Backend API',
@@ -565,7 +584,7 @@ app.get('/api/health', async (req, res) => {
 // ====================
 // DATABASE HEALTH ENDPOINT (FIXED SYNTAX)
 // ====================
-app.get('/api/database/health', async (req, res) => {
+jsonRouter.get('/api/database/health', async (req, res) => {
   const mongoState = mongoose.connection.readyState;
   const status = mongoState === 1 ? 'connected' : 'disconnected';
   res.json({
@@ -578,7 +597,7 @@ app.get('/api/database/health', async (req, res) => {
 // ====================
 // APP CONFIG ENDPOINT
 // ====================
-app.get('/api/config', (req, res) => {
+jsonRouter.get('/api/config', (req, res) => {
   res.json({
     success: true,
     features: { liveGames: true, userProfiles: true },
@@ -591,7 +610,7 @@ app.get('/api/config', (req, res) => {
 // ====================
 // NBA GAMES ENDPOINTS (ADDED FOR FRONTEND)
 // ====================
-app.get('/api/nba/games/today', async (req, res) => {
+jsonRouter.get('/api/nba/games/today', async (req, res) => {
   try {
     console.log('🏀 Fetching NBA games for today...');
     
@@ -632,7 +651,7 @@ app.get('/api/nba/games/today', async (req, res) => {
   }
 });
 
-app.get('/api/nba/games', async (req, res) => {
+jsonRouter.get('/api/nba/games', async (req, res) => {
   try {
     console.log('🏀 Fetching NBA games...');
     
@@ -685,7 +704,7 @@ app.get('/api/nba/games', async (req, res) => {
 // ====================
 // PRIVACY POLICY ROUTE (Added per File 1)
 // ====================
-app.get('/privacy', (req, res) => {
+jsonRouter.get('/privacy', (req, res) => {
   const privacyHtml = `
     <!DOCTYPE html>
     <html>
@@ -921,7 +940,7 @@ secretPhraseRouter.get('/aggregate', async (req, res) => {
 app.use('/api/secret-phrases', authenticateToken, secretPhraseRouter);
 
 // Basic route
-app.get('/', (req, res) => {
+jsonRouter.get('/', (req, res) => {
   res.json({ 
     message: 'NBA Dialogflow Webhook Server is running!',
     status: 'OK',

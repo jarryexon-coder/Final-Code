@@ -17,18 +17,32 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   try {
     console.log('🔄 RevenueCat webhook received');
     
+    // DEBUG: LOG EVERYTHING
+    console.log('🔐 [DEBUG] Received Auth Header:', req.headers['authorization']);
+    console.log('🔐 [DEBUG] Expected Auth Header:', `Bearer ${process.env.REVENUECAT_WEBHOOK_SECRET}`);
+    console.log('🔐 [DEBUG] Full REQ Headers:', JSON.stringify(req.headers, null, 2));
+
     // 1. Get raw body as string for authorization check
     const rawBody = req.body.toString('utf8');
     
     // 2. Check AUTHORIZATION HEADER (Bearer token)
     const authHeader = req.headers['authorization'];
-    const yourWebhookSecret = process.env.REVENUECAT_WEBHOOK_SECRET; // Should be 'RC_WhSec_...'
-    const expectedHeader = `Bearer ${yourWebhookSecret}`;
+    const expectedSecret = process.env.REVENUECAT_WEBHOOK_SECRET; // Should be 'RC_WhSec_...'
+    const expectedHeader = `Bearer ${expectedSecret}`;
+    
+    // === ADDED ENHANCED DEBUG LINES ===
+    console.log('🔐 [DEBUG WEBHOOK AUTH]');
+    console.log('Received Header:', `"${authHeader}"`);
+    console.log('Expected Header:', `"${expectedHeader}"`);
+    console.log('Secret from Env exists?:', !!expectedSecret);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+    // ===================================
     
     // 3. Validate in production
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'production' && expectedSecret) {
       if (authHeader !== expectedHeader) {
         console.error('❌ Webhook auth failed. Received:', authHeader);
+        console.error('❌ Expected:', expectedHeader);
         return res.status(401).json({ success: false, error: 'Invalid authorization' });
       }
     } else {
@@ -143,9 +157,9 @@ router.post('/stripe-receipt', express.json(), async (req, res) => {
       { app_user_id, fetch_token },
       {
         headers: {
-          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.REVENUECAT_STRIPE_PUBLIC_KEY}`,
           'X-Platform': 'stripe',
-          'Authorization': `Bearer ${revenuecatStripeKey}` // Use rcb_ key here
+          'Content-Type': 'application/json'
         }
       }
     );
