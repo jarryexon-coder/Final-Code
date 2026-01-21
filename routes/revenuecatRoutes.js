@@ -186,7 +186,7 @@ async function handleCancellation(data) {
 }
 
 async function handleExpiration(data) {
-  console.log(`⏰ EXPIRATION: User ${data.app_user_id}'s subscription expired');
+  console.log(`⏰ EXPIRATION: User ${data.app_user_id}'s subscription expired`);
   
   await updateUserSubscription(data.app_user_id, {
     status: 'expired',
