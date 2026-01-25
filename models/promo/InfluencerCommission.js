@@ -1,4 +1,4 @@
-const { Model, DataTypes } = require('sequelize');
+import { Model, DataTypes } from 'sequelize';
 
 module.exports = (sequelize) => {
   class InfluencerCommission extends Model {

@@ -1,141 +1,106 @@
 import mongoose from 'mongoose';
 
 const playerSchema = new mongoose.Schema({
-  externalId: {
+  // Basic Information
+  sport: {
     type: String,
-    unique: true
+    required: true,
+    enum: ['NFL', 'NBA', 'NHL', 'MLB', 'SOCCER']
   },
   name: {
     type: String,
     required: true,
-    trim: true
+    index: true
   },
-  firstName: String,
-  lastName: String,
   team: {
+    type: String,
+    required: true,
+    index: true
+  },
+  teamId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Team'
   },
-  teamAbbreviation: String,
   position: {
     type: String,
-    enum: ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'G/F', 'F/C']
+    required: true,
+    index: true
   },
-  jerseyNumber: Number,
-  height: String,
-  weight: Number,
-  birthDate: Date,
+  number: Number,
+  
+  // Physical Attributes
   age: Number,
+  height: String,
+  weight: String,
   college: String,
   country: String,
-  experience: Number,
   
-  // Current season stats
+  // Performance Metrics
+  experience: String,
+  status: {
+    type: String,
+    default: 'Active',
+    enum: ['Active', 'Inactive', 'Injured', 'Suspended']
+  },
+  injuryStatus: String,
+  
+  // Statistics (embedded document)
   stats: {
-    gamesPlayed: { type: Number, default: 0 },
-    gamesStarted: { type: Number, default: 0 },
-    minutesPerGame: { type: Number, default: 0 },
-    
-    // Scoring
-    pointsPerGame: { type: Number, default: 0 },
-    fieldGoalPercentage: { type: Number, default: 0 },
-    threePointPercentage: { type: Number, default: 0 },
-    freeThrowPercentage: { type: Number, default: 0 },
-    
-    // Rebounds
-    reboundsPerGame: { type: Number, default: 0 },
-    offensiveReboundsPerGame: { type: Number, default: 0 },
-    defensiveReboundsPerGame: { type: Number, default: 0 },
-    
-    // Assists & Turnovers
-    assistsPerGame: { type: Number, default: 0 },
-    turnoversPerGame: { type: Number, default: 0 },
-    
-    // Steals & Blocks
-    stealsPerGame: { type: Number, default: 0 },
-    blocksPerGame: { type: Number, default: 0 },
-    
-    // Fantasy
-    fantasyPointsPerGame: { type: Number, default: 0 },
-    playerEfficiencyRating: { type: Number, default: 0 }
+    season: String,
+    games: Number,
   },
   
-  // Advanced stats
-  advancedStats: {
-    usageRate: Number,
-    trueShootingPercentage: Number,
-    effectiveFieldGoalPercentage: Number,
-    winShares: Number,
-    valueOverReplacement: Number,
-    plusMinus: Number
-  },
+  // Advanced Analytics
+  advancedStats: mongoose.Schema.Types.Mixed,
+  subjectiveStats: mongoose.Schema.Types.Mixed,
+  analytics: mongoose.Schema.Types.Mixed,
   
-  // Injury status
-  injury: {
-    status: {
-      type: String,
-      enum: ['healthy', 'day_to_day', 'out', 'injured_reserve'],
-      default: 'healthy'
-    },
-    description: String,
-    date: Date,
-    expectedReturn: Date
-  },
-  
-  // Fantasy relevance
+  // Fantasy Sports
+  fantasyPoints: Number,
   fantasyRank: Number,
-  fantasyPositionRank: Number,
-  fantasyValue: Number,
-  ownershipPercentage: Number,
+  isPremium: {
+    type: Boolean,
+    default: false
+  },
   
-  // Media
-  photoUrl: String,
-  headshotUrl: String,
+  // Financial
+  salary: String,
+  contract: String,
+  contractValue: String,
   
-  // Social
-  twitterHandle: String,
-  instagramHandle: String,
+  // Social/Engagement
+  social: {
+    twitter: String,
+    instagram: String
+  },
+  highlights: [String],
+  
+  // Trending/Performance
+  trend: {
+    type: String,
+    enum: ['up', 'down', 'stable']
+  },
   
   // Metadata
-  lastUpdated: {
+  createdAt: {
     type: Date,
     default: Date.now
   },
-  source: String,
-  
-  // Historical stats (array for multiple seasons)
-  seasons: [{
-    season: String,
-    team: String,
-    gamesPlayed: Number,
-    pointsPerGame: Number,
-    reboundsPerGame: Number,
-    assistsPerGame: Number,
-    // ... other stats
-  }]
-}, {
-  timestamps: true
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  },
+  externalId: String // For third-party API references
 });
 
-// Indexes for faster queries
-playerSchema.index({ name: 'text', firstName: 'text', lastName: 'text' });
-playerSchema.index({ teamAbbreviation: 1 });
-playerSchema.index({ position: 1 });
-playerSchema.index({ 'stats.fantasyPointsPerGame': -1 });
+// Compound indexes for common queries
+playerSchema.index({ sport: 1, team: 1 });
+playerSchema.index({ sport: 1, position: 1 });
+playerSchema.index({ sport: 1, fantasyPoints: -1 });
+playerSchema.index({ name: 'text', team: 'text', position: 'text' });
 
-// Virtual for full name
-playerSchema.virtual('fullName').get(function() {
-  return `${this.firstName || ''} ${this.lastName || ''}`.trim();
-});
-
-// Virtual for fantasy value tier
-playerSchema.virtual('fantasyTier').get(function() {
-  const points = this.stats?.fantasyPointsPerGame || 0;
-  if (points >= 50) return 'Elite';
-  if (points >= 40) return 'Star';
-  if (points >= 30) return 'Starter';
-  if (points >= 20) return 'Role Player';
-  return 'Bench';
+playerSchema.pre('save', function() {
+  this.updatedAt = Date.now();
 });
 
 const Player = mongoose.model('Player', playerSchema);

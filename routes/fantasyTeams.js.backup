@@ -1,8 +1,8 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const FantasyTeam = require('../models/FantasyTeam');
-// const authenticateToken = require('../middleware/auth'); // Uncomment when auth is ready
-const cacheMiddleware = require('../middleware/cacheMiddleware');
+import FantasyTeam from '../models/FantasyTeam.js';
+// import authenticateToken from '../middleware/auth.js'; // Uncomment when auth is ready
+import cacheMiddleware from '../middleware/cacheMiddleware.js';
 
 // Get user's fantasy teams
 router.get('/my-teams', /* authenticateToken, */ cacheMiddleware(300), async (req, res) => {
@@ -110,4 +110,4 @@ router.get('/:teamId/analytics', /* authenticateToken, */ cacheMiddleware(600), 
   }
 });
 
-module.exports = router;
+export default router;

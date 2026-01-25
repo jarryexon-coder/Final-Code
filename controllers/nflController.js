@@ -54,4 +54,4 @@ const nflController = {
   }
 };
 
-module.exports = nflController;
+export default nflController;

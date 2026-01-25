@@ -54,4 +54,4 @@ const nhlController = {
   }
 };
 
-module.exports = nhlController;
+export default nhlController;

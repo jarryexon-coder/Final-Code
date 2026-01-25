@@ -1,46 +1,50 @@
-// middleware/auth.js - JWT Authentication
+// middleware/auth.js
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
-dotenv.config();
+import User from '../models/user.js';
 
-export const authenticateToken = (req, res, next) => {
-  // Public endpoints that don't need auth
-  const publicEndpoints = [
-    '/health',
-    '/api/sports-analytics/arbitrage',
-    '/api/situational/spot-plays'
-  ];
-  
-  if (publicEndpoints.some(endpoint => req.path.startsWith(endpoint))) {
-    return next();
-  }
-  
-  // For premium/secret endpoints
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  
-  if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      error: 'Authentication token required' 
-    });
-  }
-  
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ 
+export const auth = async (req, res, next) => {
+  try {
+    // Get token from header
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+
+    if (!token) {
+      return res.status(401).json({ 
         success: false, 
-        error: 'Invalid or expired token' 
+        message: 'No authentication token, access denied' 
       });
     }
-    req.user = user;
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Check if user exists
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+
+    // Check if user is active
+    if (user.status !== 'active') {
+      return res.status(403).json({ 
+        success: false, 
+        message: 'User account is not active' 
+      });
+    }
+
+    // Attach user to request
+    req.user = decoded;
+    req.user.userId = decoded.userId;
     next();
-  });
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    res.status(401).json({ 
+      success: false, 
+      message: 'Token is not valid or expired' 
+    });
+  }
 };
 
-// Rate limiting by user
-export const userRateLimit = (req, res, next) => {
-  const userId = req.user?.id || req.ip;
-  // Implement Redis-based rate limiting
-  next();
-};
+export { auth as authenticateToken };

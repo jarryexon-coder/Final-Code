@@ -73,4 +73,4 @@ class AIPredictionService {
   }
 }
 
-module.exports = new AIPredictionService();
+export default new AIPredictionService();

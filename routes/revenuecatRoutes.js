@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import express from 'express';
 import axios from 'axios';
 import crypto from 'crypto';
-import revenuecatService from '../services/revenuecatService.js';
+import revenuecatService from '../services/revenuecat-service.js';
 import firebaseAnalyticsService from '../services/firebaseAnalyticsService.js';
 
 const router = express.Router();

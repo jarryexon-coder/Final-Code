@@ -1,4 +1,4 @@
-const fetch = require('node-fetch');
+import fetch from 'node-fetch';
 
 class NBADataService {
   constructor() {
@@ -81,4 +81,4 @@ class NBADataService {
   }
 }
 
-module.exports = new NBADataService();
+export default new NBADataService();

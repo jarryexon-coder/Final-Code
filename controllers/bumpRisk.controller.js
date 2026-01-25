@@ -1,0 +1,3 @@
+
+// Default export
+export default {};

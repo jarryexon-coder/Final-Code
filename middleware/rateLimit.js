@@ -1,7 +1,7 @@
-const rateLimit = require('express-rate-limit');
+import rateLimit from 'express-rate-limit';
 
 // Rate limiter for promo endpoints
-const promoLimiter = rateLimit({
+export const promoLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // limit each IP to 10 requests per windowMs
   message: {
@@ -13,7 +13,7 @@ const promoLimiter = rateLimit({
 });
 
 // Rate limiter for influencer endpoints
-const influencerLimiter = rateLimit({
+export const influencerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 20, // limit each IP to 20 requests per hour
   message: {
@@ -23,5 +23,3 @@ const influencerLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
-
-module.exports = { promoLimiter, influencerLimiter };

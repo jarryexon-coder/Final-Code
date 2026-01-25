@@ -1,5 +1,5 @@
-const axios = require('axios');
-const NodeCache = require('node-cache');
+import axios from 'axios';
+import NodeCache from 'node-cache';
 
 // Cache for 5 minutes
 const cache = new NodeCache({ stdTTL: 300 });
@@ -160,4 +160,4 @@ class NBAApiService {
   }
 }
 
-module.exports = new NBAApiService();
+export default new NBAApiService();

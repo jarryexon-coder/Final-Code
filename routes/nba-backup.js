@@ -1,10 +1,11 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const enhancedNBAService = require('../services/enhancedNBAService');
-const cacheMiddleware = require('../middleware/cacheMiddleware');
+import enhancedNBAService from '../services/enhancedNBAService.js';
+import cacheMiddleware from '../middleware/cacheMiddleware.js';
+import { sportsScheduler } from '../services/sports-scheduler.js';
 
 // Get player stats with real BallDon'tLie API
-router.get('/player/:playerName', cacheMiddleware(300), async function(req, res) {
+router.get('/player/:playerName', cacheMiddleware(300), async (req, res) => {
   try {
     const playerName = req.params.playerName;
     console.log('🎯 Fetching stats for player:', playerName);
@@ -25,7 +26,7 @@ router.get('/player/:playerName', cacheMiddleware(300), async function(req, res)
 });
 
 // Get betting odds from your scheduler
-router.get('/betting/odds', cacheMiddleware(300), function(req, res) {
+router.get('/betting/odds', cacheMiddleware(300), (req, res) => {
   try {
     console.log('[NBA] Returning sample betting data');
     
@@ -68,25 +69,9 @@ router.get('/betting/odds', cacheMiddleware(300), function(req, res) {
     });
   }
 });
-  } catch (error) {
-    console.error('❌ Betting odds error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-  } catch (error) {
-    console.error('❌ Betting odds error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch betting odds'
-    });
-  }
-});
 
 // Get player props from your scheduler
-router.get('/betting/player-props', cacheMiddleware(600), function(req, res) {
+router.get('/betting/player-props', cacheMiddleware(600), (req, res) => {
   try {
     const props = enhancedNBAService.getPlayerProps();
     
@@ -104,7 +89,7 @@ router.get('/betting/player-props', cacheMiddleware(600), function(req, res) {
 });
 
 // Get predictions from your scheduler
-router.get('/betting/predictions', cacheMiddleware(600), function(req, res) {
+router.get('/betting/predictions', cacheMiddleware(600), (req, res) => {
   try {
     const predictions = enhancedNBAService.getPredictions();
     
@@ -122,9 +107,8 @@ router.get('/betting/predictions', cacheMiddleware(600), function(req, res) {
 });
 
 // Get scheduler status
-router.get('/scheduler/status', function(req, res) {
+router.get('/scheduler/status', (req, res) => {
   try {
-    const sportsScheduler = require('../services/sports-scheduler').sportsScheduler;
     const status = sportsScheduler.getStatus();
     
     res.json({
@@ -141,7 +125,7 @@ router.get('/scheduler/status', function(req, res) {
 });
 
 // Enhanced player statistics with advanced metrics
-router.get('/player/:playerName/advanced', cacheMiddleware(300), async function(req, res) {
+router.get('/player/:playerName/advanced', cacheMiddleware(300), async (req, res) => {
   try {
     const playerName = req.params.playerName;
     const stats = await enhancedNBAService.getPlayerStats(playerName);
@@ -167,25 +151,25 @@ router.get('/player/:playerName/advanced', cacheMiddleware(300), async function(
 
 // Calculate advanced statistics
 function calculateAdvancedStats(basicStats) {
-  var points = basicStats.points || 0;
-  var rebounds = basicStats.rebounds || 0;
-  var assists = basicStats.assists || 0;
-  var steals = basicStats.steals || 0;
-  var blocks = basicStats.blocks || 0;
-  var fgPercentage = basicStats.fg_percentage || 0;
-  var games = basicStats.games_played || 1;
+  const points = basicStats.points || 0;
+  const rebounds = basicStats.rebounds || 0;
+  const assists = basicStats.assists || 0;
+  const steals = basicStats.steals || 0;
+  const blocks = basicStats.blocks || 0;
+  const fgPercentage = basicStats.fg_percentage || 0;
+  const games = basicStats.games_played || 1;
 
   // Player Efficiency Rating (simplified)
-  var per = (points + rebounds + assists + steals + blocks) / games;
+  const per = (points + rebounds + assists + steals + blocks) / games;
 
   // Fantasy points calculation (standard DFS scoring)
-  var fantasyPoints = points + (rebounds * 1.2) + (assists * 1.5) + (steals * 3) + (blocks * 3);
+  const fantasyPoints = points + (rebounds * 1.2) + (assists * 1.5) + (steals * 3) + (blocks * 3);
 
   // Value rating (custom metric)
-  var valueRating = ((points + rebounds + assists) / 3).toFixed(1);
+  const valueRating = ((points + rebounds + assists) / 3).toFixed(1);
 
   // Shooting efficiency
-  var shootingEfficiency = (fgPercentage * 1.5).toFixed(1);
+  const shootingEfficiency = (fgPercentage * 1.5).toFixed(1);
 
   return {
     playerEfficiencyRating: per.toFixed(1),
@@ -196,10 +180,8 @@ function calculateAdvancedStats(basicStats) {
   };
 }
 
-module.exports = router;
-
 // Get NBA games (today's games)
-router.get('/games/today', cacheMiddleware(300), async function(req, res) {
+router.get('/games/today', cacheMiddleware(300), async (req, res) => {
   try {
     // This would connect to your NBA database tables
     // For now, return sample data
@@ -236,7 +218,7 @@ router.get('/games/today', cacheMiddleware(300), async function(req, res) {
 });
 
 // Get NBA standings
-router.get('/standings', cacheMiddleware(600), async function(req, res) {
+router.get('/standings', cacheMiddleware(600), async (req, res) => {
   try {
     const sampleStandings = [
       { team: 'Celtics', conference: 'East', wins: 30, losses: 10, win_percentage: 75.0 },
@@ -261,7 +243,7 @@ router.get('/standings', cacheMiddleware(600), async function(req, res) {
 });
 
 // Get team roster
-router.get('/teams/:teamId/roster', cacheMiddleware(600), async function(req, res) {
+router.get('/teams/:teamId/roster', cacheMiddleware(600), async (req, res) => {
   try {
     const { teamId } = req.params;
     const sampleRoster = [
@@ -288,7 +270,7 @@ router.get('/teams/:teamId/roster', cacheMiddleware(600), async function(req, re
 // =============================================================================
 
 // Get NBA players list
-router.get('/players', cacheMiddleware(600), async function(req, res) {
+router.get('/players', cacheMiddleware(600), async (req, res) => {
   try {
     console.log('[NBA] Fetching players data');
     
@@ -326,10 +308,10 @@ router.get('/players', cacheMiddleware(600), async function(req, res) {
   }
 });
 
-// Get betting odds
-router.get('/betting/odds', cacheMiddleware(300), function(req, res) {
+// Get betting odds (duplicate endpoint - corrected)
+router.get('/betting/odds-enhanced', cacheMiddleware(300), (req, res) => {
   try {
-    console.log('[NBA] Fetching betting odds');
+    console.log('[NBA] Fetching betting odds (enhanced)');
     
     const odds = {
       games: [
@@ -363,82 +345,4 @@ router.get('/betting/odds', cacheMiddleware(300), function(req, res) {
   }
 });
 
-// =============================================================================
-// ENHANCED NBA DATA ENDPOINTS (ADDED 2025-12-05)
-// =============================================================================
-
-// Get NBA players list
-router.get('/players', cacheMiddleware(600), async function(req, res) {
-  try {
-    console.log('[NBA] Fetching players data');
-    
-    // Sample players data
-    const players = [
-      {
-        id: 1, name: 'LeBron James', team: 'LAL', position: 'SF',
-        points: 25.5, rebounds: 7.5, assists: 8.5,
-        steals: 1.2, blocks: 0.8, fg_percentage: 52.3
-      },
-      {
-        id: 2, name: 'Stephen Curry', team: 'GSW', position: 'PG',
-        points: 28.3, rebounds: 4.5, assists: 6.5,
-        steals: 1.1, blocks: 0.4, fg_percentage: 48.5
-      },
-      {
-        id: 3, name: 'Nikola Jokic', team: 'DEN', position: 'C',
-        points: 26.2, rebounds: 12.5, assists: 9.5,
-        steals: 1.3, blocks: 0.9, fg_percentage: 58.3
-      }
-    ];
-    
-    res.json({
-      success: true,
-      data: players,
-      count: players.length,
-      last_updated: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('❌ Players error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch players'
-    });
-  }
-});
-
-// Get betting odds
-router.get('/betting/odds', cacheMiddleware(300), function(req, res) {
-  try {
-    console.log('[NBA] Fetching betting odds');
-    
-    const odds = {
-      games: [
-        {
-          id: 1,
-          home_team: 'Lakers',
-          away_team: 'Warriors',
-          date: 'Tonight 7:30 PM',
-          moneyline: { home: -150, away: +130 },
-          spread: { home: -3.5, away: +3.5 },
-          total: { points: 225.5 }
-        }
-      ],
-      player_props: [
-        { player: 'LeBron James', stat: 'Points', line: 27.5, over: -110, under: -110 }
-      ],
-      last_updated: new Date().toISOString()
-    };
-    
-    res.json({
-      success: true,
-      data: odds,
-      source: 'Betting API'
-    });
-  } catch (error) {
-    console.error('❌ Betting odds error:', error.message);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch betting odds'
-    });
-  }
-});
+export default router;

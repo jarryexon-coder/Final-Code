@@ -139,4 +139,4 @@ function getNHLScoreboard() {
   ];
 }
 
-export default router;  // Changed from module.exports = router
+export default router;

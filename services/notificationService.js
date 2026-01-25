@@ -1,5 +1,5 @@
-const { Expo } = require('expo-server-sdk');
-const User = require('../models/User');
+import { Expo } from 'expo-server-sdk';
+import User from '../models/User.js';
 
 const expo = new Expo();
 
@@ -106,4 +106,4 @@ class NotificationService {
   }
 }
 
-module.exports = new NotificationService();
+export default new NotificationService();

@@ -1,6 +1,6 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const nbaController = require('../controllers/nbaController');
+import nbaController from '../controllers/nbaController.js';
 
 // Cache middleware
 const cacheMiddleware = (seconds) => {
@@ -27,4 +27,4 @@ router.get('/betting/odds', cacheMiddleware(300), nbaController.getOdds); // Add
 // ===== FANTASY ADVICE ENDPOINT =====
 router.get('/fantasy/advice', cacheMiddleware(600), nbaController.getFantasyAdvice);
 
-module.exports = router;
+export default router;

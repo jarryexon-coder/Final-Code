@@ -98,3 +98,10 @@ export const grantPromoAccess = async (req, res) => {
         });
     }
 };
+
+// Default export
+export default {
+  export const verifySubscription = async (req, res) => {,
+  export const handleWebhook = async (req, res) => {,
+  export const grantPromoAccess = async (req, res) => {,
+};

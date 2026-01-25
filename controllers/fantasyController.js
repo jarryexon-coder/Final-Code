@@ -110,4 +110,4 @@ function calculateSleepers(data) {
     }));
 }
 
-module.exports = fantasyController;
+export default fantasyController;

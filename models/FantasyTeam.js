@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const PlayerSchema = new mongoose.Schema({
   playerId: String,
@@ -58,4 +58,4 @@ FantasyTeamSchema.pre('save', function(next) {
   next();
 });
 
-module.exports = mongoose.model('FantasyTeam', FantasyTeamSchema);
+export default mongoose.model('FantasyTeam', FantasyTeamSchema);

@@ -1,4 +1,4 @@
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 const PredictionSchema = new mongoose.Schema({
   userId: { type: String, required: true },
@@ -9,4 +9,4 @@ const PredictionSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
-module.exports = mongoose.model('Prediction', PredictionSchema);
+export default mongoose.model('Prediction', PredictionSchema);

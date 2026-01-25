@@ -1,0 +1,11 @@
+
+// Default export
+export default {};
+// getAllUsers
+export const getAllUsers = async (req, res) => {
+  try {
+    res.json({ success: true, message: "getAllUsers" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

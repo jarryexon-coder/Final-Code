@@ -1,6 +1,6 @@
 // NBA Controller - Handles NBA-related API logic
-const redis = require('redis');
-const axios = require('axios');
+import redis  from 'redis';
+import axios  from 'axios';
 
 // Create Redis client (add config in production)
 const client = redis.createClient({
@@ -594,4 +594,4 @@ const nbaController = {
   }
 };
 
-module.exports = nbaController;
+export default nbaController;

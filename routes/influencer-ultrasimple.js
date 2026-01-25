@@ -1,4 +1,4 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
 console.log('🔄 Loading ULTRA SIMPLE influencer routes...');
@@ -28,4 +28,4 @@ router.get('/directory/public', (req, res) => {
   });
 });
 
-module.exports = router;
+export default router;

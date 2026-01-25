@@ -1,13 +1,13 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const mongoose = require('mongoose');
+import mongoose from 'mongoose';
 
 // Import the middleware
-const auth = require('../middleware/auth');
+import auth from '../middleware/auth.js';
 const authenticateToken = auth.authenticateToken;
 
 // Import models
-const SecretPhraseAnalytics = require('../models/SecretPhraseAnalytics'); // Add this line
+import SecretPhraseAnalytics from '../models/SecretPhraseAnalytics.js'; // Add this line
 
 // Analytics events endpoint (POST)
 router.post('/events', async (req, res) => {
@@ -1319,4 +1319,4 @@ function getFavoriteScreens(events) {
     .map(([screen, count]) => ({ screen, count }));
 }
 
-module.exports = router;
+export default router;

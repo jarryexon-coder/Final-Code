@@ -1,5 +1,7 @@
-const https = require('https');
-const NodeCache = require('node-cache');
+import https from 'https';
+import NodeCache from 'node-cache';
+import { sportsScheduler } from './sports-scheduler.js';
+
 const cache = new NodeCache({ stdTTL: 300 });
 
 const EnhancedNBAService = {
@@ -25,7 +27,7 @@ const EnhancedNBAService = {
 
   // Fetch from BallDon'tLie using your API key
   fetchFromBallDontLie: function(playerName) {
-    return new Promise(function(resolve, reject) {
+    return new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.balldontlie.io',
         path: '/v1/players?search=' + encodeURIComponent(playerName),
@@ -36,14 +38,14 @@ const EnhancedNBAService = {
         timeout: 10000
       };
 
-      const req = https.request(options, function(res) {
+      const req = https.request(options, (res) => {
         let data = '';
 
-        res.on('data', function(chunk) {
+        res.on('data', (chunk) => {
           data += chunk;
         });
 
-        res.on('end', function() {
+        res.on('end', () => {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const parsedData = JSON.parse(data);
@@ -52,11 +54,11 @@ const EnhancedNBAService = {
                 const player = parsedData.data[0];
                 // Fetch player stats
                 EnhancedNBAService.fetchPlayerStats(player.id)
-                  .then(function(stats) {
+                  .then((stats) => {
                     const playerData = EnhancedNBAService.transformBallDontLieData(player, stats);
                     resolve(playerData);
                   })
-                  .catch(function(error) {
+                  .catch((error) => {
                     reject(error);
                   });
               } else {
@@ -71,12 +73,12 @@ const EnhancedNBAService = {
         });
       });
 
-      req.on('timeout', function() {
+      req.on('timeout', () => {
         req.destroy();
         reject(new Error('Request timeout'));
       });
 
-      req.on('error', function(error) {
+      req.on('error', (error) => {
         reject(error);
       });
 
@@ -85,7 +87,7 @@ const EnhancedNBAService = {
   },
 
   fetchPlayerStats: function(playerId) {
-    return new Promise(function(resolve, reject) {
+    return new Promise((resolve, reject) => {
       const options = {
         hostname: 'api.balldontlie.io',
         path: '/v1/season_averages?player_ids[]=' + playerId,
@@ -96,14 +98,14 @@ const EnhancedNBAService = {
         timeout: 10000
       };
 
-      const req = https.request(options, function(res) {
+      const req = https.request(options, (res) => {
         let data = '';
 
-        res.on('data', function(chunk) {
+        res.on('data', (chunk) => {
           data += chunk;
         });
 
-        res.on('end', function() {
+        res.on('end', () => {
           if (res.statusCode >= 200 && res.statusCode < 300) {
             try {
               const parsedData = JSON.parse(data);
@@ -117,12 +119,12 @@ const EnhancedNBAService = {
         });
       });
 
-      req.on('timeout', function() {
+      req.on('timeout', () => {
         req.destroy();
         reject(new Error('Request timeout'));
       });
 
-      req.on('error', function(error) {
+      req.on('error', (error) => {
         reject(error);
       });
 
@@ -132,7 +134,7 @@ const EnhancedNBAService = {
 
   // Get betting odds from your scheduler cache
   getBettingOdds: function() {
-    const cachedOdds = require('./sports-scheduler').sportsScheduler.getCachedData('odds');
+    const cachedOdds = sportsScheduler.getCachedData('odds');
     if (cachedOdds) {
       return cachedOdds;
     }
@@ -141,7 +143,7 @@ const EnhancedNBAService = {
 
   // Get player props from your scheduler cache
   getPlayerProps: function() {
-    const cachedProps = require('./sports-scheduler').sportsScheduler.getCachedData('player_props');
+    const cachedProps = sportsScheduler.getCachedData('player_props');
     if (cachedProps) {
       return cachedProps;
     }
@@ -150,7 +152,7 @@ const EnhancedNBAService = {
 
   // Get predictions from your scheduler cache
   getPredictions: function() {
-    const cachedPredictions = require('./sports-scheduler').sportsScheduler.getCachedData('predictions');
+    const cachedPredictions = sportsScheduler.getCachedData('predictions');
     if (cachedPredictions) {
       return cachedPredictions;
     }
@@ -267,4 +269,4 @@ const EnhancedNBAService = {
   }
 };
 
-module.exports = EnhancedNBAService;
+export default EnhancedNBAService;

@@ -118,4 +118,4 @@ async function validateReceipt(receipt, paymentMethod) {
   return receipt && receipt.startsWith('sub_');
 }
 
-module.exports = subscriptionController;
+export default subscriptionController;

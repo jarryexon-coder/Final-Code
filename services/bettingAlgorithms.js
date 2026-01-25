@@ -1,4 +1,4 @@
-const nbaApiService = require('./nbaApiService');
+import nbaApiService from './nbaApiService.js';
 
 class BettingAlgorithms {
   
@@ -144,4 +144,4 @@ class BettingAlgorithms {
   }
 }
 
-module.exports = new BettingAlgorithms();
+export default new BettingAlgorithms();

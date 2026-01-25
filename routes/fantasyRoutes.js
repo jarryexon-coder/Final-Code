@@ -1,8 +1,14 @@
+// fantasyRoutes.js - SAFE WORKING VERSION
 import express from 'express';
 const router = express.Router();
 
-router.get('/lineup', (req, res) => {
-  res.json({ success: true, lineup: [] });
+// Test endpoint
+router.get('/test', (req, res) => {
+    res.json({ 
+        success: true, 
+        message: 'fantasyRoutes.js is working',
+        timestamp: new Date().toISOString()
+    });
 });
 
 export default router;

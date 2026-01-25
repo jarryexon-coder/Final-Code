@@ -1,5 +1,6 @@
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+// models/user.js
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
   email: {
@@ -37,31 +38,40 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
+  
+  // Updated role field from File 1
   role: {
     type: String,
-    enum: ['user', 'admin', 'influencer', 'moderator'],
-    default: 'user'
+    default: 'user',
+    enum: ['user', 'admin']
   },
   
-  // Subscription info
+  // New status field from File 1
+  status: {
+    type: String,
+    default: 'active',
+    enum: ['active', 'suspended', 'inactive']
+  },
+  
+  // Subscription info - updated with File 1 structure
   subscription: {
-    planId: {
-      type: String,
-      enum: ['free', 'pro_monthly', 'pro_yearly', 'elite_monthly', 'elite_yearly'],
-      default: 'free'
-    },
     status: {
       type: String,
       enum: ['active', 'inactive', 'cancelled', 'expired', 'trial'],
       default: 'inactive'
     },
+    plan: {
+      type: String,
+      enum: ['free', 'pro_monthly', 'pro_yearly', 'elite_monthly', 'elite_yearly'],
+      default: 'free'
+    },
+    expiresAt: Date,
     active: {
       type: Boolean,
       default: false
     },
     currentPeriodStart: Date,
     currentPeriodEnd: Date,
-    expiresAt: Date,
     trialEnd: Date,
     cancelAtPeriodEnd: Boolean,
     cancellationRequestedAt: Date,
@@ -100,12 +110,27 @@ const userSchema = new mongoose.Schema({
     default: 0
   },
   
+  // New analytics field from File 1
+  analytics: {
+    totalSelections: { type: Number, default: 0 },
+    successfulSelections: { type: Number, default: 0 },
+    totalWinners: { type: Number, default: 0 }
+  },
+  
   // Settings
   emailVerified: {
     type: Boolean,
     default: false
   },
-  notifications: {
+  
+  // New preference fields from File 1
+  preferences: mongoose.Schema.Types.Mixed,
+  notifications: mongoose.Schema.Types.Mixed,
+  settings: mongoose.Schema.Types.Mixed,
+  generationSettings: mongoose.Schema.Types.Mixed,
+  
+  // Existing notifications
+  notificationPreferences: {
     email: { type: Boolean, default: true },
     push: { type: Boolean, default: true },
     betting: { type: Boolean, default: true },
@@ -120,17 +145,18 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// CORRECTED: Hash password before saving (async without next parameter)
-userSchema.pre('save', async function() {
+// Hash password before saving
+userSchema.pre('save', async function(next) {
   // Only run this function if password was actually modified
-  if (!this.isModified('password')) return;
+  if (!this.isModified('password')) return next();
   
   try {
     const salt = await bcrypt.genSalt(10);
     const hash = await bcrypt.hash(this.password, salt);
     this.password = hash;
+    next();
   } catch (error) {
-    throw new Error('Password hashing failed');
+    next(error);
   }
 });
 
@@ -164,5 +190,32 @@ userSchema.methods.canAccessFeature = function(featureName) {
   return this.subscription.features.includes(featureName);
 };
 
-const User = mongoose.model('User', userSchema);
-module.exports = User;
+// Method to get user status
+userSchema.methods.isActive = function() {
+  return this.status === 'active';
+};
+
+// Method to get analytics summary
+userSchema.methods.getAnalyticsSummary = function() {
+  return {
+    totalSelections: this.analytics?.totalSelections || 0,
+    successfulSelections: this.analytics?.successfulSelections || 0,
+    totalWinners: this.analytics?.totalWinners || 0,
+    successRate: this.analytics?.totalSelections 
+      ? ((this.analytics.successfulSelections / this.analytics.totalSelections) * 100).toFixed(2)
+      : 0
+  };
+};
+
+// FIXED: Check if model already exists before compiling
+// This prevents the "Cannot overwrite model once compiled" error
+let User;
+try {
+  // Check if the model is already defined
+  User = mongoose.model('User');
+} catch {
+  // If not, define it
+  User = mongoose.model('User', userSchema);
+}
+
+export default User;

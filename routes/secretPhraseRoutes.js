@@ -1,7 +1,7 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
-const SecretPhraseAnalytics = require('../models/SecretPhraseAnalytics');
-const User = require('../models/User');
+import SecretPhraseAnalytics from '../models/SecretPhraseAnalytics.js';
+import User from '../models/User.js';
 
 // POST: Log a secret phrase event
 router.post('/log-event', async (req, res) => {
@@ -508,4 +508,4 @@ router.get('/performance/compare', async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
