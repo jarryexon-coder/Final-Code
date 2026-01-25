@@ -419,6 +419,294 @@ webhookRouter.use('/api/revenuecat', revenuecatRoutes);
 app.use(webhookRouter);
 
 // ====================
+// MISSING GET HANDLERS - ADD TO server.js
+// ====================
+
+// 1. NBA API Root Handler
+app.get('/api/nba', (req, res) => {
+  res.json({
+    success: true,
+    message: 'NBA API is working',
+    endpoints: [
+      '/api/nba/games/today',
+      '/api/nba/games',
+      '/api/nba/players',
+      '/api/nba/teams',
+      '/api/nba/stats'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 2. User Preferences Root Handler
+app.get('/api/user', (req, res) => {
+  res.json({
+    success: true,
+    message: 'User Preferences API',
+    endpoints: [
+      '/api/user/notifications',
+      '/api/user/preferences',
+      '/api/user/profile'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 3. Analytics API Root Handler
+app.get('/api/analytics', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Analytics API',
+    endpoints: [
+      '/api/analytics/overview',
+      '/api/analytics/performance',
+      '/api/analytics/trends'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 4. News API Root Handler
+app.get('/api/news', (req, res) => {
+  res.json({
+    success: true,
+    message: 'News API',
+    data: {
+      sources: ['ESPN', 'Bleacher Report', 'Sports Illustrated'],
+      categories: ['NBA', 'NFL', 'NHL', 'General'],
+      latest: []
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 5. Predictions API Root Handler
+app.get('/api/predictions', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Predictions API',
+    endpoints: [
+      '/api/predictions/nba',
+      '/api/predictions/nfl',
+      '/api/predictions/nhl'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 6. NHL API Root Handler
+app.get('/api/nhl', (req, res) => {
+  res.json({
+    success: true,
+    message: 'NHL API',
+    data: {
+      currentSeason: '2023-2024',
+      upcomingGames: [],
+      standings: []
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 7. NFL API Root Handler
+app.get('/api/nfl', (req, res) => {
+  res.json({
+    success: true,
+    message: 'NFL API',
+    data: {
+      currentSeason: '2023-2024',
+      upcomingGames: [],
+      standings: []
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 8. Fantasy API Root Handler
+app.get('/api/fantasy', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Fantasy API',
+    endpoints: [
+      '/api/fantasy/teams',
+      '/api/fantasy/players',
+      '/api/fantasy/matchups',
+      '/api/fantasy/leagues'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 9. Admin API Root Handler (with authentication)
+app.get('/api/admin', authenticateToken, (req, res) => {
+  res.json({
+    success: true,
+    message: 'Admin API - Access granted',
+    user: req.user,
+    endpoints: [
+      '/api/admin/users',
+      '/api/admin/stats',
+      '/api/admin/logs'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 10. Picks API Root Handler
+app.get('/api/picks', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Picks API',
+    endpoints: [
+      '/api/picks/daily',
+      '/api/picks/trending',
+      '/api/picks/history'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 11. Kalshi API Root Handler
+app.get('/api/kalshi', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Kalshi Predictions API',
+    endpoints: [
+      '/api/kalshi/markets',
+      '/api/kalshi/trends',
+      '/api/kalshi/predictions'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 12. Sports Analytics API Root Handler
+app.get('/api/sports-analytics', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Sports Analytics API',
+    endpoints: [
+      '/api/sports-analytics/advanced',
+      '/api/sports-analytics/trends',
+      '/api/sports-analytics/predictions'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 13. PrizePicks Analytics API Root Handler
+app.get('/api/prizepicks/analytics', (req, res) => {
+  res.json({
+    success: true,
+    message: 'PrizePicks Analytics API',
+    endpoints: [
+      '/api/prizepicks/analytics/performance',
+      '/api/prizepicks/analytics/trends',
+      '/api/prizepicks/analytics/recommendations'
+    ],
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 14. Sportsbooks API Root Handler
+app.get('/api/sportsbooks', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Sportsbooks API',
+    data: {
+      sportsbooks: ['DraftKings', 'FanDuel', 'BetMGM', 'Caesars'],
+      features: ['odds', 'lines', 'promotions', 'comparisons']
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 15. NBA Games Today - Specific Endpoint
+app.get('/api/nba/games/today', async (req, res) => {
+  try {
+    // Mock data - replace with actual database query
+    const today = new Date().toISOString().split('T')[0];
+    const mockGames = [
+      {
+        id: 1,
+        homeTeam: 'Los Angeles Lakers',
+        awayTeam: 'Golden State Warriors',
+        time: '7:30 PM ET',
+        venue: 'Crypto.com Arena',
+        broadcast: 'ESPN',
+        odds: { home: -150, away: +130 }
+      },
+      {
+        id: 2,
+        homeTeam: 'Boston Celtics',
+        awayTeam: 'Miami Heat',
+        time: '8:00 PM ET',
+        venue: 'TD Garden',
+        broadcast: 'TNT',
+        odds: { home: -200, away: +170 }
+      }
+    ];
+    
+    res.json({
+      success: true,
+      date: today,
+      games: mockGames,
+      count: mockGames.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching games',
+      error: error.message
+    });
+  }
+});
+
+// 16. NBA Games Endpoint
+app.get('/api/nba/games', async (req, res) => {
+  try {
+    const mockGames = [
+      {
+        id: 1,
+        date: '2024-01-25',
+        homeTeam: 'Los Angeles Lakers',
+        awayTeam: 'Golden State Warriors',
+        status: 'upcoming'
+      },
+      {
+        id: 2,
+        date: '2024-01-25',
+        homeTeam: 'Boston Celtics',
+        awayTeam: 'Miami Heat',
+        status: 'upcoming'
+      },
+      {
+        id: 3,
+        date: '2024-01-24',
+        homeTeam: 'Phoenix Suns',
+        awayTeam: 'Dallas Mavericks',
+        status: 'completed',
+        score: { home: 112, away: 108 }
+      }
+    ];
+    
+    res.json({
+      success: true,
+      games: mockGames,
+      count: mockGames.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching games',
+      error: error.message
+    });
+  }
+});
+
+// ====================
 // ROUTE MOUNTING
 // ====================
 console.log('🔗 Mounting routes...');

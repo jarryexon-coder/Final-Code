@@ -1,0 +1,74 @@
+const crypto = require('crypto');
+const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/emailService');
+
+// Add to register endpoint (after user.save()):
+const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+user.emailVerificationToken = emailVerificationToken;
+await user.save();
+
+// Send verification email
+await sendVerificationEmail(user.email, emailVerificationToken);
+
+// Add new endpoints:
+// Verify email
+router.get('/verify-email', async (req, res) => {
+  try {
+    const { token } = req.query;
+    
+    const user = await User.findOne({ emailVerificationToken: token });
+    if (!user) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid or expired verification token' 
+      });
+    }
+
+    user.emailVerified = true;
+    user.emailVerificationToken = undefined;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Email verified successfully!'
+    });
+
+  } catch (error) {
+    console.error('Email verification error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});
+
+// Resend verification email
+router.post('/resend-verification', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId);
+    
+    if (user.emailVerified) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email already verified' 
+      });
+    }
+
+    const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+    user.emailVerificationToken = emailVerificationToken;
+    await user.save();
+
+    await sendVerificationEmail(user.email, emailVerificationToken);
+
+    res.json({
+      success: true,
+      message: 'Verification email sent!'
+    });
+
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Internal server error' 
+    });
+  }
+});

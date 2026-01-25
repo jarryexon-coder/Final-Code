@@ -1,44 +1,26 @@
-// test-db.js - ES Module version
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+import 'dotenv/config';
+import { connectDB, Player, User, Selection } from './models/index.js';
 
-// Load environment variables
-dotenv.config();
-
-async function testConnection() {
-  const uri = process.env.MONGODB_URI;
+(async () => {
+  console.log('🔍 Testing database connection and counts...');
   
-  if (!uri) {
-    console.error('❌ MONGODB_URI is not defined in .env file');
-    return;
-  }
-  
-  // Mask password in logs
-  const maskedUri = uri.replace(/mongodb\+srv:\/\/([^:]+):([^@]+)/, 'mongodb+srv://$1:****');
-  console.log('Testing connection to:', maskedUri);
-
   try {
-    await mongoose.connect(uri, { 
-      serverSelectionTimeoutMS: 5000 
-    });
+    // Check environment variable
+    console.log('MONGODB_URI:', process.env.MONGODB_URI ? '✓ Set' : '✗ Missing');
     
-    console.log('✅ SUCCESS: Connected to MongoDB!');
+    // Connect
+    console.log('Connecting to MongoDB...');
+    await connectDB();
     
-    // List available collections
-    const collections = await mongoose.connection.db.listCollections().toArray();
-    console.log('\n📁 Collections found:', collections.map(c => c.name));
+    // Count documents
+    console.log('\n📊 Current database counts:');
+    console.log('Players:', await Player.countDocuments());
+    console.log('Users:', await User.countDocuments());
+    console.log('Selections:', await Selection.countDocuments());
     
-    await mongoose.disconnect();
-    console.log('\n✅ Test completed successfully!');
-    
+    process.exit(0);
   } catch (error) {
-    console.error('\n❌ FAILED:', error.message);
-    console.log('\n🔧 Quick checks:');
-    console.log('1. Password correct? (Check .env file)');
-    console.log('2. Network access in Atlas? (Add 0.0.0.0/0 temporarily)');
-    console.log('3. User "jarryexon_db_user" exists?');
+    console.error('❌ Error:', error.message);
+    process.exit(1);
   }
-}
-
-// Run the test
-testConnection();
+})();

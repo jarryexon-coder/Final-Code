@@ -1,12 +1,12 @@
-# Server Configuration
+[[# Server Configuration
 PORT=3000
 NODE_ENV=development
 
 # Database
-MONGODB_URI=mongodb://127.0.0.1:27017/nba-fantasy
+MONGODB_URI=mongodb://Jerryexon1:Bigyear1@cluster0-shard-00-00.6sqqrz.mongodb.net:27017,cluster0-shard-00-01.6sqqrz.mongodb.net:27017,cluster0-shard-00-02.6sqqrz.mongodb.net:27017/sports-app?ssl=true&replicaSet=atlas-14ni6o-shard-0&authSource=admin&retryWrites=true&w=majority
 
 # Security
-JWT_SECRET= 1eeabd59e98e1e9caf0d7ece7ef46971740284901f4a41c356ab9a4a90b14f8e07edfab0b340becdd72fd3ec821a1db14bada19ee1976d8f018366b83692271d
+JWT_SECRET=978c37492913b1c9caeda76385adc739bade8ddcee4c0cb49248b3017f6199089c8fc28f332af03d0f92d47927040b2bb93121c61baddfb3ab75c77da4297e64
 ADMIN_TOKEN=e12d30a6b8e540c1858630e8018c80e1
 
 # Sports Data APIs

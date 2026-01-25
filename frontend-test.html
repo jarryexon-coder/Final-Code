@@ -1,0 +1,95 @@
+<!-- frontend-test.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Auth Test</title>
+</head>
+<body>
+  <h1>Authentication Test</h1>
+  
+  <div id="status">Connecting to server...</div>
+  
+  <div style="margin: 20px 0;">
+    <h3>Register</h3>
+    <input id="regEmail" placeholder="Email" value="test@example.com"><br>
+    <input id="regPassword" type="password" placeholder="Password" value="Password123!"><br>
+    <input id="regFirstName" placeholder="First Name" value="Test"><br>
+    <input id="regLastName" placeholder="Last Name" value="User"><br>
+    <button onclick="register()">Register</button>
+  </div>
+  
+  <div style="margin: 20px 0;">
+    <h3>Login</h3>
+    <input id="loginEmail" placeholder="Email"><br>
+    <input id="loginPassword" type="password" placeholder="Password"><br>
+    <button onclick="login()">Login</button>
+  </div>
+  
+  <div id="result"></div>
+  
+  <script>
+    const API_URL = 'http://localhost:3002/api/auth';
+    
+    async function checkServer() {
+      try {
+        const res = await fetch('http://localhost:3002/health');
+        const data = await res.json();
+        document.getElementById('status').innerHTML = 
+          `✅ Server is running (${data.status})`;
+      } catch (error) {
+        document.getElementById('status').innerHTML = 
+          `❌ Server not responding: ${error.message}`;
+      }
+    }
+    
+    async function register() {
+      const email = document.getElementById('regEmail').value;
+      const password = document.getElementById('regPassword').value;
+      const firstName = document.getElementById('regFirstName').value;
+      const lastName = document.getElementById('regLastName').value;
+      
+      try {
+        const res = await fetch(`${API_URL}/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, firstName, lastName })
+        });
+        
+        const data = await res.json();
+        document.getElementById('result').innerHTML = 
+          `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+          
+        // Auto-fill login with registered credentials
+        document.getElementById('loginEmail').value = email;
+        document.getElementById('loginPassword').value = password;
+      } catch (error) {
+        document.getElementById('result').innerHTML = 
+          `Error: ${error.message}`;
+      }
+    }
+    
+    async function login() {
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+      
+      try {
+        const res = await fetch(`${API_URL}/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        
+        const data = await res.json();
+        document.getElementById('result').innerHTML = 
+          `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+      } catch (error) {
+        document.getElementById('result').innerHTML = 
+          `Error: ${error.message}`;
+      }
+    }
+    
+    // Check server on load
+    checkServer();
+  </script>
+</body>
+</html>

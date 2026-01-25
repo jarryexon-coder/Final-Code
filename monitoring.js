@@ -1,39 +1,22 @@
 // monitoring.js
-import axios from 'axios';
+import os from 'os';
 
-class HealthMonitor {
-  constructor() {
-    this.endpoints = [
-      'http://localhost:3002/health',
-      'http://localhost:3002/api/health',
-      'http://localhost:3002/api/nba/games',
-      'http://localhost:3002/api/kalshi/health'
-    ];
-  }
-
-  async checkAll() {
-    const results = [];
-    for (const endpoint of this.endpoints) {
-      try {
-        const response = await axios.get(endpoint, { timeout: 5000 });
-        results.push({
-          endpoint,
-          status: response.status,
-          healthy: response.status === 200,
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        results.push({
-          endpoint,
-          status: error.response?.status || 0,
-          healthy: false,
-          error: error.message,
-          timestamp: new Date().toISOString()
-        });
-      }
-    }
-    return results;
-  }
+function logServerStatus() {
+  const status = {
+    timestamp: new Date().toISOString(),
+    memory: {
+      total: os.totalmem(),
+      free: os.freemem(),
+      used: os.totalmem() - os.freemem(),
+      usagePercent: ((os.totalmem() - os.freemem()) / os.totalmem() * 100).toFixed(2)
+    },
+    cpu: os.loadavg(),
+    uptime: os.uptime(),
+    mongo: mongoose.connection.readyState === 1
+  };
+  
+  console.log('📊 Server Status:', JSON.stringify(status, null, 2));
 }
 
-export default HealthMonitor;
+// Log every 5 minutes
+setInterval(logServerStatus, 300000);
