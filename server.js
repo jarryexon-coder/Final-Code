@@ -27,7 +27,8 @@ import Database from './utils/database.js';
 import { requestLogger, authLogger } from './middleware/logger.js';
 import { cacheMiddleware } from './middleware/cache.js';
 import DataSyncService from './services/dataSyncService.js';
-import RealDataService from './services/realDataService.js';
+// Remove or comment out the RealDataService import if it doesn't exist:
+// import RealDataService from './services/realDataService.js';
 
 // Import route modules
 import nbaRoutes from './routes/nbaRoutes.js';
@@ -166,54 +167,65 @@ app.use(requestLogger);
 app.use('/api/auth', authLogger);
 
 // ====================
-// SAFE FIREBASE INITIALIZATION
+// SAFE FIREBASE INITIALIZATION - FIXED VERSION
 // ====================
 const initializeFirebase = async () => {
   try {
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
-      console.log('🔧 Initializing Firebase Admin SDK...');
+    // FIRST, check if the environment variable exists at all
+    if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+      console.log('ℹ️ FIREBASE_SERVICE_ACCOUNT_KEY not found. Running without Firebase.');
+      return null; // Exit early, no error
+    }
+
+    console.log('🔧 Initializing Firebase Admin SDK...');
+    
+    const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY.trim(); // Now key is safe to use
+    
+    // Check if it's a JSON string
+    if (!key.startsWith('{')) {
+      console.log('⚠️ FIREBASE_SERVICE_ACCOUNT_KEY does not appear to be valid JSON');
+      console.log('⚠️ Running without Firebase Admin SDK');
+      return null;
+    }
+
+    try {
+      const serviceAccount = JSON.parse(key);
       
-      const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+      // Validate required fields
+      if (!serviceAccount.project_id || !serviceAccount.private_key) {
+        console.warn('⚠️ Firebase service account missing required fields (project_id or private_key)');
+        console.warn('⚠️ Running without Firebase Admin SDK');
+        return null;
+      }
       
-      // Check if it's a JSON string
-      if (key.startsWith('{')) {
+      const admin = await import('firebase-admin');
+      
+      // Check if already initialized
+      if (admin.apps && admin.apps.length === 0) {
         try {
-          const serviceAccount = JSON.parse(key);
-          
-          if (!serviceAccount.project_id) {
-            throw new Error('Firebase service account missing project_id');
-          }
-          
-          const admin = await import('firebase-admin');
-          
-          // Check if already initialized
-          if (admin.apps.length === 0) {
-            admin.initializeApp({
-              credential: admin.credential.cert(serviceAccount),
-              projectId: serviceAccount.project_id
-            });
-            console.log('✅ Firebase Admin SDK initialized successfully');
-          } else {
-            console.log('✅ Firebase Admin SDK already initialized');
-          }
-          
-          return admin;
-        } catch (parseError) {
-          console.error('❌ Failed to parse Firebase service account:', parseError.message);
-          console.log('⚠️ Firebase service account might be malformed JSON');
+          admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            projectId: serviceAccount.project_id
+          });
+          console.log('✅ Firebase Admin SDK initialized successfully');
+        } catch (initError) {
+          console.error('❌ Failed to initialize Firebase app:', initError.message);
+          console.warn('⚠️ Running without Firebase Admin SDK');
           return null;
         }
       } else {
-        console.log('⚠️ FIREBASE_SERVICE_ACCOUNT_KEY does not appear to be valid JSON');
-        return null;
+        console.log('✅ Firebase Admin SDK already initialized or apps property not found');
       }
-    } else {
-      console.log('⚠️ FIREBASE_SERVICE_ACCOUNT_KEY not found. Running without Firebase.');
+      
+      return admin;
+    } catch (parseError) {
+      console.error('❌ Failed to parse Firebase service account:', parseError.message);
+      console.warn('⚠️ Running without Firebase Admin SDK');
       return null;
     }
   } catch (error) {
-    console.error('❌ Failed to initialize Firebase Admin SDK:', error.message);
-    console.warn('⚠️ Running in mock mode - analytics events will be logged to console only');
+    console.error('❌ Firebase initialization error:', error.message);
+    console.warn('⚠️ Running without Firebase Admin SDK');
     return null;
   }
 };
@@ -284,7 +296,7 @@ const createMemoryCache = () => {
 };
 
 // ====================
-// UPDATED MONGODB CONNECTION FROM FILE 1
+// UPDATED MONGODB CONNECTION - SIMPLIFIED
 // ====================
 const connectDB = async () => {
   try {
@@ -303,9 +315,8 @@ const connectDB = async () => {
     
     console.log('✅ MongoDB connected successfully');
     
-    // ====================
-    // DATA SYNC SERVICE INITIALIZATION FROM FILE 1
-    // ====================
+    // Remove or comment out the DataSyncService initialization for now:
+    /*
     const dataSyncService = new DataSyncService();
     app.locals.dataSyncService = dataSyncService;
     
@@ -315,6 +326,7 @@ const connectDB = async () => {
         console.error('Failed to start data sync service:', err);
       });
     }, 10000); // Wait 10 seconds
+    */
     
     return true;
   } catch (error) {
@@ -956,7 +968,8 @@ mountRoute('/api/history', historyRoutes, 'historyRoutes');
 mountRoute('/api/search/prizepicks', searchPrizePicksRoutes, 'searchPrizePicksRoutes');
 mountRoute('/api/social', socialRoutes, 'socialRoutes');
 mountRoute('/api/fantasy-teams', fantasyTeamsRoutes, 'fantasyTeamsRoutes');
-mountRoute('/api/index', indexRoutes, 'indexRoutes');
+// Note: indexRoutes is commented out since it's not a valid router
+// mountRoute('/api/index', indexRoutes, 'indexRoutes');
 mountRoute('/api/lines', linesRoutes, 'linesRoutes');
 mountRoute('/api/monitoring', monitoringRoutes, 'monitoringRoutes');
 mountRoute('/api/secret-phrases', secretPhraseRoutes, 'secretPhraseRoutes');
