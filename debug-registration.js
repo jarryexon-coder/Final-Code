@@ -1,90 +1,122 @@
 // debug-registration.js
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 dotenv.config();
 
-async function testRegistration() {
-  console.log('=== Testing Registration Logic ===\n');
-  
+console.log('🔍 DEBUG: Registration Validation Issue\n');
+
+async function debugValidation() {
   try {
-    // Connect to MongoDB
-    console.log('1. Connecting to MongoDB...');
     await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ MongoDB connected');
     
-    // Import User model
-    console.log('\n2. Importing User model...');
-    const UserModule = await import('./models/user.js');
-    const User = UserModule.default;
-    console.log('✅ User model loaded');
+    // Import your current User model
+    const User = mongoose.model('User');
+    console.log('✅ User model loaded\n');
     
-    // Test creating a user
-    console.log('\n3. Testing user creation...');
-    const testUser = new User({
-      email: `test${Date.now()}@example.com`,
-      password: 'Password123!',
-      firstName: 'Test',
-      lastName: 'User',
-      name: 'Test User',
-      username: `test${Date.now()}`
+    // Test the name splitting logic
+    const testNames = [
+      'John Doe',
+      'John',
+      'John Michael Doe',
+      '  John  Doe  ', // with extra spaces
+      '', // empty
+      ' ' // just spaces
+    ];
+    
+    console.log('Testing name splitting logic:');
+    console.log('=============================');
+    
+    testNames.forEach(name => {
+      console.log(`\nInput: "${name}"`);
+      const trimmedName = name.trim();
+      const nameParts = trimmedName.split(/\s+/).filter(part => part.length > 0);
+      console.log(`  Parts:`, nameParts);
+      console.log(`  Count: ${nameParts.length}`);
+      
+      if (nameParts.length > 0) {
+        const firstName = nameParts[0];
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'User';
+        console.log(`  First: "${firstName}"`);
+        console.log(`  Last: "${lastName}"`);
+        console.log(`  Full: "${firstName} ${lastName}"`);
+      } else {
+        console.log(`  ERROR: No valid name parts!`);
+      }
     });
     
-    console.log('   User object created');
-    console.log('   Email:', testUser.email);
-    console.log('   Password (hashed):', testUser.password.substring(0, 20) + '...');
+    // Test creating a user with the actual logic
+    console.log('\n\nTesting actual user creation:');
+    console.log('=============================');
     
-    // Test save
-    console.log('\n4. Testing save...');
-    const savedUser = await testUser.save();
-    console.log('✅ User saved successfully!');
-    console.log('   ID:', savedUser._id);
-    console.log('   Created at:', savedUser.createdAt);
+    const testUserData = {
+      email: 'debug-test@example.com',
+      password: 'Test123!@#',
+      name: 'John Doe'
+    };
     
-    // Test password comparison
-    console.log('\n5. Testing password comparison...');
-    const isMatch = await savedUser.comparePassword('Password123!');
-    console.log('✅ Password match:', isMatch);
+    console.log('Input data:', testUserData);
     
-    // Clean up
-    console.log('\n6. Cleaning up...');
-    await User.deleteOne({ _id: savedUser._id });
-    console.log('✅ Test user deleted');
+    // Apply the same logic as in authRoutes.js
+    const { name } = testUserData;
+    const trimmedName = name.trim();
+    const nameParts = trimmedName.split(/\s+/).filter(part => part.length > 0);
     
-    await mongoose.connection.close();
-    console.log('\n🎉 All tests passed!');
+    if (nameParts.length === 0) {
+      console.log('❌ ERROR: No valid name parts after splitting!');
+      return;
+    }
+    
+    const firstName = nameParts[0];
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'User';
+    
+    console.log(`\nAfter processing:`);
+    console.log(`  First name: "${firstName}"`);
+    console.log(`  Last name: "${lastName}"`);
+    console.log(`  Full name: "${trimmedName}"`);
+    
+    // Try to create a user
+    const user = new User({
+      email: testUserData.email,
+      password: testUserData.password,
+      name: trimmedName,
+      firstName,
+      lastName,
+      role: 'user',
+      status: 'active',
+      stats: { loginCount: 0, lastLogin: null },
+      subscription: { status: 'inactive', plan: 'free', tier: 'free' }
+    });
+    
+    console.log('\nUser object before validation:');
+    console.log({
+      email: user.email,
+      name: user.name,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      hasPassword: !!user.password
+    });
+    
+    // Validate
+    const validationError = user.validateSync();
+    if (validationError) {
+      console.log('\n❌ VALIDATION ERRORS:');
+      Object.keys(validationError.errors).forEach(key => {
+        const err = validationError.errors[key];
+        console.log(`  - ${key}: ${err.message} (value: "${err.value}")`);
+      });
+    } else {
+      console.log('\n✅ Validation passed!');
+    }
+    
+    await mongoose.disconnect();
     
   } catch (error) {
-    console.error('\n❌ Error:', error.message);
-    console.error('Full error:', error.stack);
-    
-    // Check for specific MongoDB errors
-    if (error.name === 'MongoServerError') {
-      console.log('\n📌 MongoDB Error Code:', error.code);
-      console.log('📌 MongoDB Error Message:', error.message);
-      
-      // Check for duplicate key error
-      if (error.code === 11000) {
-        console.log('\n🔍 Duplicate key error!');
-        console.log('   This means a user with that email or username already exists.');
-      }
+    console.error('❌ Error:', error.message);
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.disconnect();
     }
-    
-    // Check for validation errors
-    if (error.name === 'ValidationError') {
-      console.log('\n🔍 Validation errors:');
-      for (const field in error.errors) {
-        console.log(`   ${field}: ${error.errors[field].message}`);
-      }
-    }
-    
-    await mongoose.connection.close();
   }
 }
 
-testRegistration();
+debugValidation();

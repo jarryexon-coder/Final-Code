@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-01-26T06:50:36.894Z",
+  "count": 6,
+  "users": [
+    {
+      "_id": "6974537ab75d74d78765a7ab",
+      "email": "user@example.com",
+      "name": "",
+      "role": "user"
+    },
+    {
+      "_id": "6974537ab75d74d78765a7a9",
+      "email": "admin@example.com",
+      "name": "",
+      "role": "admin"
+    },
+    {
+      "_id": "6974537ab75d74d78765a7aa",
+      "email": "premium@example.com",
+      "name": "",
+      "role": "user"
+    },
+    {
+      "_id": "6975f4fbcf855c85de8f5811",
+      "email": "testuser123@example.com",
+      "name": "Test User",
+      "role": "user",
+      "status": "active"
+    },
+    {
+      "_id": "69760d99e72dbaa179c8b46c",
+      "email": "test@example.com",
+      "name": "Test User",
+      "role": "user",
+      "status": "active"
+    },
+    {
+      "_id": "69761e7e42c4cbff4c52ac85",
+      "email": "prod-test@example.com",
+      "name": "Prod Test",
+      "role": "user",
+      "status": "active"
+    }
+  ]
+}

@@ -1,25 +1,26 @@
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-
-dotenv.config();
 
 class Database {
   constructor() {
     this.isConnected = false;
-    this.retryCount = 0;
-    this.maxRetries = 3;
   }
 
   async connect() {
-    try {
-      if (this.isConnected) {
-        console.log('✅ Using existing database connection');
-        return mongoose.connection;
-      }
+    // Check if already connected via the main server connection
+    if (mongoose.connection.readyState === 1) {
+      console.log('✅ Database service: Using existing MongoDB connection');
+      this.isConnected = true;
+      return mongoose.connection;
+    }
 
-      const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/nba_fantasy_ai';
+    // If not connected, this is a fallback (shouldn't normally happen)
+    try {
+      console.log('⚠️ Database service: No active connection, attempting fallback...');
       
-      console.log('🔗 Connecting to MongoDB...');
+      const MONGODB_URI = process.env.MONGODB_URI;
+      if (!MONGODB_URI) {
+        throw new Error('MONGODB_URI not configured');
+      }
       
       await mongoose.connect(MONGODB_URI, {
         serverSelectionTimeoutMS: 5000,
@@ -28,58 +29,82 @@ class Database {
       });
 
       this.isConnected = true;
-      console.log('✅ MongoDB connected successfully');
+      console.log('✅ Database service: MongoDB connected via fallback');
       
-      // Connection events
-      mongoose.connection.on('error', (err) => {
-        console.error('❌ MongoDB connection error:', err);
-        this.isConnected = false;
-      });
-
-      mongoose.connection.on('disconnected', () => {
-        console.log('⚠️ MongoDB disconnected');
-        this.isConnected = false;
-      });
-
-      mongoose.connection.on('reconnected', () => {
-        console.log('✅ MongoDB reconnected');
-        this.isConnected = true;
-      });
-
       return mongoose.connection;
       
     } catch (error) {
-      console.error('❌ Failed to connect to MongoDB:', error.message);
-      this.retryCount++;
-      
-      if (this.retryCount < this.maxRetries) {
-        console.log(`🔄 Retrying connection (${this.retryCount}/${this.maxRetries})...`);
-        setTimeout(() => this.connect(), 2000);
-      } else {
-        throw new Error('Max connection retries exceeded');
-      }
+      console.error('❌ Database service fallback failed:', error.message);
+      throw new Error('Database connection not available. Ensure connectDB() is called in server.js first');
     }
   }
 
   async disconnect() {
-    try {
-      if (this.isConnected) {
-        await mongoose.disconnect();
-        this.isConnected = false;
-        console.log('✅ MongoDB disconnected');
-      }
-    } catch (error) {
-      console.error('❌ Error disconnecting from MongoDB:', error);
+    // Don't actually disconnect here since main server manages the connection
+    if (this.isConnected) {
+      this.isConnected = false;
+      console.log('ℹ️ Database service: Connection reference released (actual connection managed by server)');
     }
   }
 
   getStatus() {
     return {
-      connected: this.isConnected,
-      readyState: mongoose.connection?.readyState,
-      host: mongoose.connection?.host,
-      name: mongoose.connection?.name
+      serviceConnected: this.isConnected,
+      mongooseReadyState: mongoose.connection?.readyState || 0,
+      mongooseConnected: mongoose.connection?.readyState === 1,
+      host: mongoose.connection?.host || 'Not connected',
+      name: mongoose.connection?.name || 'Not connected'
     };
+  }
+
+  // Utility methods for database operations
+  async query(collection, query = {}, options = {}) {
+    if (!this.isConnected) {
+      await this.connect();
+    }
+    return await mongoose.connection.collection(collection).find(query, options).toArray();
+  }
+
+  async findOne(collection, query = {}, options = {}) {
+    if (!this.isConnected) {
+      await this.connect();
+    }
+    return await mongoose.connection.collection(collection).findOne(query, options);
+  }
+
+  async insert(collection, document) {
+    if (!this.isConnected) {
+      await this.connect();
+    }
+    return await mongoose.connection.collection(collection).insertOne(document);
+  }
+
+  async update(collection, filter, update, options = {}) {
+    if (!this.isConnected) {
+      await this.connect();
+    }
+    return await mongoose.connection.collection(collection).updateOne(filter, update, options);
+  }
+
+  async delete(collection, filter, options = {}) {
+    if (!this.isConnected) {
+      await this.connect();
+    }
+    return await mongoose.connection.collection(collection).deleteOne(filter, options);
+  }
+
+  async aggregate(collection, pipeline = []) {
+    if (!this.isConnected) {
+      await this.connect();
+    }
+    return await mongoose.connection.collection(collection).aggregate(pipeline).toArray();
+  }
+
+  getCollection(collectionName) {
+    if (!this.isConnected && mongoose.connection.readyState !== 1) {
+      throw new Error('Database not connected');
+    }
+    return mongoose.connection.collection(collectionName);
   }
 }
 

@@ -171,20 +171,19 @@ app.use('/api/auth', authLogger);
 // ====================
 const initializeFirebase = async () => {
   try {
-    // FIRST, check if the environment variable exists at all
     if (!process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
       console.log('ℹ️ FIREBASE_SERVICE_ACCOUNT_KEY not found. Running without Firebase.');
-      return null; // Exit early, no error
+      return null;
     }
 
     console.log('🔧 Initializing Firebase Admin SDK...');
     
-    const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY.trim(); // Now key is safe to use
+    const key = process.env.FIREBASE_SERVICE_ACCOUNT_KEY.trim();
     
     // Check if it's a JSON string
     if (!key.startsWith('{')) {
-      console.log('⚠️ FIREBASE_SERVICE_ACCOUNT_KEY does not appear to be valid JSON');
-      console.log('⚠️ Running without Firebase Admin SDK');
+      console.log('⚠️ FIREBASE_SERVICE_ACCOUNT_KEY is not valid JSON');
+      console.warn('⚠️ Running without Firebase Admin SDK');
       return null;
     }
 
@@ -193,15 +192,24 @@ const initializeFirebase = async () => {
       
       // Validate required fields
       if (!serviceAccount.project_id || !serviceAccount.private_key) {
-        console.warn('⚠️ Firebase service account missing required fields (project_id or private_key)');
+        console.warn('⚠️ Firebase service account missing required fields');
         console.warn('⚠️ Running without Firebase Admin SDK');
         return null;
       }
       
       const admin = await import('firebase-admin');
       
-      // Check if already initialized
-      if (admin.apps && admin.apps.length === 0) {
+      // SAFER CHECK: First check if admin exists, then apps, then if it's an array
+      if (!admin || typeof admin !== 'object') {
+        console.log('⚠️ Firebase Admin SDK module not properly loaded');
+        return null;
+      }
+      
+      // Check if apps exists and is an array - WITH BETTER ERROR HANDLING
+      const apps = admin.apps;
+      const isAlreadyInitialized = apps && typeof apps === 'object' && 'length' in apps;
+      
+      if (!isAlreadyInitialized) {
         try {
           admin.initializeApp({
             credential: admin.credential.cert(serviceAccount),
@@ -214,7 +222,7 @@ const initializeFirebase = async () => {
           return null;
         }
       } else {
-        console.log('✅ Firebase Admin SDK already initialized or apps property not found');
+        console.log('✅ Firebase Admin SDK already initialized');
       }
       
       return admin;
@@ -1129,37 +1137,43 @@ process.on('uncaughtException', (error) => {
 });
 
 // ====================
-// SERVER INITIALIZATION
+// SERVER INITIALIZATION - UPDATED
 // ====================
 let server;
 const initializeServer = async () => {
   console.log('🚀 Initializing NBA Fantasy AI Backend...');
-  
+
   try {
     // 1. Initialize Firebase
     const firebaseAdmin = await initializeFirebase();
     if (firebaseAdmin) {
       app.locals.firebaseAdmin = firebaseAdmin;
     }
-    
+
     // 2. Initialize Redis
     redisClient = initializeRedis();
     app.locals.redisClient = redisClient;
-    
-    // 3. Connect to MongoDB
+
+    // 3. Connect to MongoDB (ONCE - remove Database.connect() call below)
     await connectDB();
-    
-    // 4. Initialize Database service
+
+    // 4. Initialize Database service WITHOUT creating new connection
     try {
-      await Database.connect();
-      console.log('✅ Database service initialized');
+      // Just verify the connection instead of creating a new one
+      if (mongoose.connection.readyState === 1) {
+        console.log('✅ Database service verified connection');
+        // Attach the mongoose connection to app.locals if needed
+        app.locals.db = mongoose.connection;
+      } else {
+        console.warn('⚠️ Database connection not ready for Database service');
+      }
     } catch (error) {
-      console.error('❌ Database initialization failed:', error.message);
+      console.error('❌ Database service verification failed:', error.message);
     }
-    
+
     // 5. Start HTTP server
     server = createServer(app);
-    
+
     // 6. Initialize WebSocket server
     const wsServer = new Server(server, {
       cors: {
@@ -1167,17 +1181,17 @@ const initializeServer = async () => {
         methods: ['GET', 'POST']
       }
     });
-    
+
     app.locals.wsServer = wsServer;
-    
+
     wsServer.on('connection', (socket) => {
       console.log('✅ WebSocket client connected:', socket.id);
-      
+
       socket.on('disconnect', () => {
         console.log('❌ WebSocket client disconnected:', socket.id);
       });
     });
-    
+
     // 7. Start server
     server.listen(PORT, HOST, () => {
       console.log(`========================================`);
@@ -1193,7 +1207,7 @@ const initializeServer = async () => {
       console.log(`🔄 Data Sync Status: http://${HOST}:${PORT}/api/sync/status`);
       console.log(`========================================`);
     });
-    
+
     return server;
   } catch (error) {
     console.error('❌ Failed to initialize server:', error.message);

@@ -2,7 +2,7 @@ import express from 'express';
 import fantasyDraftController from '../controllers/fantasyDraftController.js';
 import { authenticateToken } from '../middleware/auth.js';
 import rateLimit from 'express-rate-limit';
-import DraftRecommendation from '../models/DraftRecommendation.js';
+import DraftRecommendation from '../models/Draft.js';
 import realDataService from '../services/realDataService.js';
 
 const router = express.Router();

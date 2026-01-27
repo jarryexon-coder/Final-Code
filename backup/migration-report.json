@@ -1,0 +1,360 @@
+{
+  "timestamp": "2026-01-26T06:47:29.797Z",
+  "config": {
+    "mongodbUri": "***",
+    "dryRun": true
+  },
+  "analysis": {
+    "users": [
+      {
+        "_id": "6974537ab75d74d78765a7ab",
+        "email": "user@example.com",
+        "password": "$2a$10$X6ZUaQ..xmcL.AEHk9SUVeQppmQ4EGKmYG1kFQfzWURYDiGQM7AHK",
+        "name": "",
+        "firstName": "Regular",
+        "lastName": "User",
+        "username": "user",
+        "avatar": "",
+        "role": "user",
+        "subscription": {
+          "planId": "free",
+          "status": "active",
+          "active": true,
+          "features": [
+            "basic-analytics",
+            "limited-selections"
+          ]
+        },
+        "favoriteTeams": [],
+        "favoriteSports": [],
+        "totalPredictions": 0,
+        "correctPredictions": 0,
+        "winRate": 0,
+        "points": 0,
+        "emailVerified": false,
+        "notifications": {
+          "email": true,
+          "push": true,
+          "betting": true,
+          "fantasy": true
+        },
+        "createdAt": "2026-01-24T05:07:06.181Z",
+        "updatedAt": "2026-01-24T05:07:06.181Z",
+        "__v": 0
+      },
+      {
+        "_id": "6974537ab75d74d78765a7a9",
+        "email": "admin@example.com",
+        "password": "$2a$10$brErq.NrGmQ4B.KA3J5zKuX0EVxMEknNq.pwveehalNn0M6igmESS",
+        "name": "",
+        "firstName": "Admin",
+        "lastName": "User",
+        "username": "admin",
+        "avatar": "",
+        "role": "admin",
+        "subscription": {
+          "planId": "elite_yearly",
+          "status": "active",
+          "active": true,
+          "features": [
+            "all-access",
+            "premium-analytics",
+            "unlimited-selections"
+          ]
+        },
+        "favoriteTeams": [],
+        "favoriteSports": [],
+        "totalPredictions": 0,
+        "correctPredictions": 0,
+        "winRate": 0,
+        "points": 0,
+        "emailVerified": false,
+        "notifications": {
+          "email": true,
+          "push": true,
+          "betting": true,
+          "fantasy": true
+        },
+        "createdAt": "2026-01-24T05:07:06.181Z",
+        "updatedAt": "2026-01-24T05:07:06.181Z",
+        "__v": 0
+      },
+      {
+        "_id": "6974537ab75d74d78765a7aa",
+        "email": "premium@example.com",
+        "password": "$2a$10$kYLGU04OCa6yybl2NvN8wuwZCcZukifMQ2sL/3qdwYGYVWnqOFS26",
+        "name": "",
+        "firstName": "Premium",
+        "lastName": "User",
+        "username": "premium",
+        "avatar": "",
+        "role": "user",
+        "subscription": {
+          "planId": "pro_yearly",
+          "status": "active",
+          "active": true,
+          "features": [
+            "premium-analytics",
+            "unlimited-selections"
+          ]
+        },
+        "favoriteTeams": [],
+        "favoriteSports": [],
+        "totalPredictions": 0,
+        "correctPredictions": 0,
+        "winRate": 0,
+        "points": 0,
+        "emailVerified": false,
+        "notifications": {
+          "email": true,
+          "push": true,
+          "betting": true,
+          "fantasy": true
+        },
+        "createdAt": "2026-01-24T05:07:06.181Z",
+        "updatedAt": "2026-01-24T05:07:06.181Z",
+        "__v": 0
+      },
+      {
+        "_id": "6975f4fbcf855c85de8f5811",
+        "email": "testuser123@example.com",
+        "password": "$2a$10$qvyo883MeB1/pGNdWB9vtOKmfTfyXeJpqFOotAB9EBXdVqqSMnOqG",
+        "name": "Test User",
+        "firstName": "Test",
+        "lastName": "User",
+        "role": "user",
+        "status": "active",
+        "subscription": {
+          "status": "inactive",
+          "plan": "free"
+        },
+        "emailVerified": false,
+        "username": "testuser1231769338107042",
+        "createdAt": "2026-01-25T10:48:27.042Z",
+        "updatedAt": "2026-01-25T10:48:27.042Z",
+        "__v": 0
+      },
+      {
+        "_id": "69760d99e72dbaa179c8b46c",
+        "email": "test@example.com",
+        "password": "$2a$10$6WDqSOog.YwlOQ7goBlNd.HzBx4FCzEVcMS0T.FEPg0.Jf2MQcdd6",
+        "name": "Test User",
+        "firstName": "Test",
+        "lastName": "User",
+        "username": "test1769344409695",
+        "role": "user",
+        "status": "active",
+        "subscription": {
+          "status": "inactive",
+          "plan": "free"
+        },
+        "emailVerified": false,
+        "createdAt": "2026-01-25T12:33:29.699Z",
+        "updatedAt": "2026-01-25T12:33:29.699Z",
+        "__v": 0
+      },
+      {
+        "_id": "69761e7e42c4cbff4c52ac85",
+        "email": "prod-test@example.com",
+        "password": "$2a$10$E77V/CBRbF0CIjG71cbnou12Pp9PuhrUMorc2ttCpMPabxk36o.PC",
+        "name": "Prod Test",
+        "firstName": "Prod",
+        "lastName": "Test",
+        "username": "prod-test1769348734996",
+        "role": "user",
+        "status": "active",
+        "subscription": {
+          "status": "inactive",
+          "plan": "free"
+        },
+        "emailVerified": false,
+        "createdAt": "2026-01-25T13:45:34.998Z",
+        "updatedAt": "2026-01-25T13:45:34.998Z",
+        "__v": 0
+      }
+    ],
+    "analysis": {
+      "total": 6,
+      "byRole": {
+        "user": 5,
+        "admin": 1
+      },
+      "byStatus": {
+        "unknown": 3,
+        "active": 3
+      },
+      "bySubscription": {
+        "free": 3
+      },
+      "withEmailVerified": 0,
+      "withLastLogin": 0,
+      "sampleUsers": [
+        {
+          "email": "user@example.com",
+          "name": "",
+          "role": "user",
+          "subscription": {
+            "planId": "free",
+            "status": "active",
+            "active": true,
+            "features": [
+              "basic-analytics",
+              "limited-selections"
+            ]
+          }
+        },
+        {
+          "email": "admin@example.com",
+          "name": "",
+          "role": "admin",
+          "subscription": {
+            "planId": "elite_yearly",
+            "status": "active",
+            "active": true,
+            "features": [
+              "all-access",
+              "premium-analytics",
+              "unlimited-selections"
+            ]
+          }
+        },
+        {
+          "email": "premium@example.com",
+          "name": "",
+          "role": "user",
+          "subscription": {
+            "planId": "pro_yearly",
+            "status": "active",
+            "active": true,
+            "features": [
+              "premium-analytics",
+              "unlimited-selections"
+            ]
+          }
+        },
+        {
+          "email": "testuser123@example.com",
+          "name": "Test User",
+          "role": "user",
+          "subscription": {
+            "status": "inactive",
+            "plan": "free"
+          }
+        },
+        {
+          "email": "test@example.com",
+          "name": "Test User",
+          "role": "user",
+          "subscription": {
+            "status": "inactive",
+            "plan": "free"
+          }
+        }
+      ]
+    }
+  },
+  "plan": {
+    "timestamp": "2026-01-26T06:47:29.538Z",
+    "analysis": {
+      "total": 6,
+      "byRole": {
+        "user": 5,
+        "admin": 1
+      },
+      "byStatus": {
+        "unknown": 3,
+        "active": 3
+      },
+      "bySubscription": {
+        "free": 3
+      },
+      "withEmailVerified": 0,
+      "withLastLogin": 0,
+      "sampleUsers": [
+        {
+          "email": "user@example.com",
+          "name": "",
+          "role": "user",
+          "subscription": {
+            "planId": "free",
+            "status": "active",
+            "active": true,
+            "features": [
+              "basic-analytics",
+              "limited-selections"
+            ]
+          }
+        },
+        {
+          "email": "admin@example.com",
+          "name": "",
+          "role": "admin",
+          "subscription": {
+            "planId": "elite_yearly",
+            "status": "active",
+            "active": true,
+            "features": [
+              "all-access",
+              "premium-analytics",
+              "unlimited-selections"
+            ]
+          }
+        },
+        {
+          "email": "premium@example.com",
+          "name": "",
+          "role": "user",
+          "subscription": {
+            "planId": "pro_yearly",
+            "status": "active",
+            "active": true,
+            "features": [
+              "premium-analytics",
+              "unlimited-selections"
+            ]
+          }
+        },
+        {
+          "email": "testuser123@example.com",
+          "name": "Test User",
+          "role": "user",
+          "subscription": {
+            "status": "inactive",
+            "plan": "free"
+          }
+        },
+        {
+          "email": "test@example.com",
+          "name": "Test User",
+          "role": "user",
+          "subscription": {
+            "status": "inactive",
+            "plan": "free"
+          }
+        }
+      ]
+    },
+    "steps": [
+      "1. Create backup of current users collection",
+      "2. Validate all users have required fields",
+      "3. Transform old user data to new schema",
+      "4. Create new users in temporary collection",
+      "5. Verify migration success",
+      "6. Replace old collection with new one (if dryRun is false)"
+    ],
+    "warnings": [],
+    "estimatedTime": "0.6000000000000001 seconds"
+  },
+  "simulation": {
+    "total": 6,
+    "successful": 6,
+    "failed": 0,
+    "skipped": 0,
+    "errors": []
+  },
+  "backupFile": "/Users/jerryexon/sports-app-production/nba-backend/backup/users-backup-1769410049543.json",
+  "recommendations": [
+    "Test with a small subset of users first",
+    "Have a rollback plan ready"
+  ]
+}

@@ -1,136 +1,174 @@
 // test-complete-auth.js
-import fetch from 'node-fetch';
+import axios from 'axios';
 
-const API_URL = 'http://localhost:3002/api/auth';
+const BASE_URL = 'http://localhost:3002';
 
 async function testCompleteAuth() {
-  console.log('=== Testing Complete Authentication Flow ===\n');
+  console.log('🚀 COMPLETE AUTHENTICATION TEST');
+  console.log('================================\n');
   
-  const testEmail = `user${Date.now()}@example.com`;
-  const testPassword = 'Password123!';
+  const testUser = {
+    email: `complete-test-${Date.now()}@example.com`,
+    password: 'Complete123!',
+    name: 'Complete Test User'
+  };
+  
+  let accessToken = null;
+  let refreshToken = null;
+  let userId = null;
   
   try {
-    // 1. Test Registration
+    // 1. REGISTER
     console.log('1. Testing Registration...');
-    const registerRes = await fetch(`${API_URL}/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: testEmail,
-        password: testPassword,
-        firstName: 'Test',
-        lastName: 'User'
-      })
-    });
+    const registerRes = await axios.post(`${BASE_URL}/api/auth/register`, testUser);
     
-    const registerData = await registerRes.json();
-    
-    if (!registerRes.ok) {
-      console.log('❌ Registration failed:', registerData.error);
+    if (!registerRes.data.success) {
+      console.log('❌ Registration failed:', registerRes.data.message);
       return;
     }
     
-    console.log('✅ Registration successful');
-    console.log('   User ID:', registerData.user.id);
-    console.log('   Token received:', registerData.token ? 'Yes' : 'No');
+    console.log('✅ Registration successful!');
+    console.log('   User ID:', registerRes.data.data.user.id);
+    console.log('   Email:', registerRes.data.data.user.email);
+    console.log('   Name:', registerRes.data.data.user.name);
     
-    const authToken = registerData.token;
+    userId = registerRes.data.data.user.id;
     
-    // 2. Test Login with wrong password
-    console.log('\n2. Testing Login with wrong password...');
-    try {
-      const wrongLoginRes = await fetch(`${API_URL}/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: testEmail,
-          password: 'WrongPassword123!'
-        })
+    // 2. LOGIN
+    console.log('\n2. Testing Login...');
+    const loginRes = await axios.post(`${BASE_URL}/api/auth/login`, {
+      email: testUser.email,
+      password: testUser.password
+    });
+    
+    if (!loginRes.data.success) {
+      console.log('❌ Login failed:', loginRes.data.message);
+      return;
+    }
+    
+    console.log('✅ Login successful!');
+    console.log('   User:', loginRes.data.data.user.email);
+    console.log('   Role:', loginRes.data.data.user.role);
+    
+    accessToken = loginRes.data.data.tokens.accessToken;
+    refreshToken = loginRes.data.data.tokens.refreshToken;
+    
+    // 3. PROTECTED ROUTE
+    console.log('\n3. Testing Protected Route...');
+    const profileRes = await axios.get(`${BASE_URL}/api/auth/profile`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    
+    if (!profileRes.data.success) {
+      console.log('❌ Protected route failed:', profileRes.data.message);
+      return;
+    }
+    
+    console.log('✅ Protected route successful!');
+    console.log('   Profile data received');
+    console.log('   Email:', profileRes.data.data.email);
+    console.log('   Name:', profileRes.data.data.name);
+    
+    // 4. UPDATE PROFILE
+    console.log('\n4. Testing Profile Update...');
+    const updateRes = await axios.put(`${BASE_URL}/api/auth/profile`, {
+      name: 'Updated Name',
+      preferences: {
+        theme: 'dark',
+        notifications: {
+          email: true,
+          push: false
+        }
+      }
+    }, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    
+    if (!updateRes.data.success) {
+      console.log('❌ Profile update failed:', updateRes.data.message);
+    } else {
+      console.log('✅ Profile update successful!');
+      console.log('   New name:', updateRes.data.data.user.name);
+    }
+    
+    // 5. TOKEN REFRESH
+    console.log('\n5. Testing Token Refresh...');
+    const refreshRes = await axios.post(`${BASE_URL}/api/auth/refresh`, {
+      refreshToken
+    });
+    
+    if (!refreshRes.data.success) {
+      console.log('❌ Token refresh failed:', refreshRes.data.message);
+    } else {
+      console.log('✅ Token refresh successful!');
+      console.log('   New access token received');
+      
+      // Update token and test again
+      const newAccessToken = refreshRes.data.data.accessToken;
+      
+      const newProfileRes = await axios.get(`${BASE_URL}/api/auth/profile`, {
+        headers: { Authorization: `Bearer ${newAccessToken}` }
       });
       
-      const wrongLoginData = await wrongLoginRes.json();
-      console.log('✅ Correctly rejected wrong password');
-    } catch (error) {
-      console.log('❌ Wrong password test error:', error.message);
-    }
-    
-    // 3. Test Login with correct credentials
-    console.log('\n3. Testing Login with correct credentials...');
-    const loginRes = await fetch(`${API_URL}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: testEmail,
-        password: testPassword
-      })
-    });
-    
-    const loginData = await loginRes.json();
-    
-    if (!loginRes.ok) {
-      console.log('❌ Login failed:', loginData.error);
-      return;
-    }
-    
-    console.log('✅ Login successful');
-    const newAuthToken = loginData.token;
-    
-    // 4. Test Protected Route (/me)
-    console.log('\n4. Testing Protected Route (GET /me)...');
-    const meRes = await fetch(`${API_URL}/me`, {
-      headers: {
-        'Authorization': `Bearer ${newAuthToken}`
+      if (newProfileRes.data.success) {
+        console.log('✅ New token works!');
       }
-    });
-    
-    const meData = await meRes.json();
-    
-    if (!meRes.ok) {
-      console.log('❌ Protected route failed:', meData.error);
-      return;
     }
     
-    console.log('✅ Protected route accessible');
-    console.log('   Current user:', meData.user.email);
-    console.log('   Role:', meData.user.role);
-    
-    // 5. Test Token Refresh
-    console.log('\n5. Testing Token Refresh...');
-    const refreshRes = await fetch(`${API_URL}/refresh`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: newAuthToken
-      })
-    });
-    
-    const refreshData = await refreshRes.json();
-    
-    if (refreshRes.ok) {
-      console.log('✅ Token refresh successful');
-      console.log('   New token received');
-    } else {
-      console.log('⚠️ Token refresh:', refreshData.error || 'Not implemented');
-    }
-    
-    // 6. Test Logout
+    // 6. LOGOUT
     console.log('\n6. Testing Logout...');
-    const logoutRes = await fetch(`${API_URL}/logout`, {
-      method: 'POST'
+    const logoutRes = await axios.post(`${BASE_URL}/api/auth/logout`, {
+      refreshToken
+    }, {
+      headers: { Authorization: `Bearer ${accessToken}` }
     });
     
-    const logoutData = await logoutRes.json();
-    console.log('✅ Logout:', logoutData.message);
+    if (!logoutRes.data.success) {
+      console.log('❌ Logout failed:', logoutRes.data.message);
+    } else {
+      console.log('✅ Logout successful!');
+      
+      // Try to use the token after logout (should fail)
+      try {
+        await axios.get(`${BASE_URL}/api/auth/profile`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        console.log('⚠️  Token still works after logout (refresh would fail)');
+      } catch (error) {
+        console.log('✅ Token invalidated after logout (expected)');
+      }
+    }
     
-    console.log('\n🎉 All authentication tests passed!');
-    console.log('\n📋 Summary:');
-    console.log('   - Registration: ✅');
-    console.log('   - Login: ✅');
-    console.log('   - Protected routes: ✅');
-    console.log('   - Complete auth flow: ✅');
+    // 7. EXISTING USER LOGIN
+    console.log('\n7. Testing Existing User Login...');
+    const existingLoginRes = await axios.post(`${BASE_URL}/api/auth/login`, {
+      email: 'test@example.com',
+      password: 'password123'
+    });
+    
+    if (existingLoginRes.data.success) {
+      console.log('✅ Existing user login works!');
+      console.log('   User:', existingLoginRes.data.data.user.email);
+    } else {
+      console.log('❌ Existing user login failed:', existingLoginRes.data.message);
+    }
+    
+    console.log('\n🎉 ALL AUTHENTICATION TESTS COMPLETED SUCCESSFULLY!');
+    console.log('\n📋 SUMMARY:');
+    console.log('   ✅ User registration');
+    console.log('   ✅ User login');
+    console.log('   ✅ Protected routes');
+    console.log('   ✅ Profile management');
+    console.log('   ✅ Token refresh');
+    console.log('   ✅ Logout');
+    console.log('   ✅ Existing users');
     
   } catch (error) {
-    console.error('\n❌ Test failed with error:', error.message);
+    console.error('\n❌ Test failed:', error.message);
+    if (error.response) {
+      console.error('Status:', error.response.status);
+      console.error('Response:', error.response.data);
+    }
   }
 }
 

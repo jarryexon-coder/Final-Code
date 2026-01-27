@@ -1,4 +1,4 @@
-// /services/dataSyncService.js
+// services/dataSyncService.js - FIXED VERSION
 class DataSyncService {
   constructor(db) {
     this.db = db;
@@ -197,7 +197,8 @@ class DataSyncService {
   }
 
   async syncUFC() {
-    const events = await this.apiServices.realData.getUFC Events();
+    // FIXED: Removed space in method name
+    const events = await this.apiServices.realData.getUFCEvents();
     if (events?.success) {
       await this.db.collection('events').bulkWrite(
         events.events.map(event => ({
@@ -543,4 +544,8 @@ class DataSyncService {
   }
 }
 
-module.exports = DataSyncService;
+// For ES modules (which you appear to be using)
+export default DataSyncService;
+
+// For CommonJS
+// module.exports = DataSyncService;
