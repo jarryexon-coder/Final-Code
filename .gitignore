@@ -1,2 +1,75 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
 .env
-.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+tmp/
+temp/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Build outputs
+dist/
+build/
+out/
+
+# Misc
+.DS_Store
+*.pem
+*.p12
+*.key
+*.csr
+*.crt
+*.cer
+
+# Backup files
+*.backup
+*.bak
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+test-results/
+
+# Uploads
+uploads/
+temp/
+
+# Secrets
+secrets/
+config/*.json
+config/*.key
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini

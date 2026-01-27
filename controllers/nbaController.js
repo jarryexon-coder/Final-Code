@@ -1,6 +1,12 @@
 // NBA Controller - Handles NBA-related API logic
 import redis  from 'redis';
 import axios  from 'axios';
+import RealDataService from '../services/realDataService.js';
+import Game from '../models/Game.js';
+import RealPlayer from '../models/RealPlayer.js';
+import Standing from '../models/Standing.js';
+
+const realDataService = new RealDataService();
 
 // Create Redis client (add config in production)
 const client = redis.createClient({
@@ -29,13 +35,43 @@ const formatDate = (date) => {
   return date.toISOString().split('T')[0];
 };
 
-// Helper function to fetch real games data from API
+// Helper function to fetch real games data from API (supports both services)
 const fetchRealGamesData = async (date) => {
   try {
+    // First, try to use the RealDataService from File 1
+    try {
+      const gamesData = await realDataService.getNBAGames(date);
+      if (gamesData && gamesData.games && gamesData.games.length > 0) {
+        console.log(`✅ Fetched ${gamesData.games.length} games from RealDataService`);
+        return gamesData.games.map(game => ({
+          id: game.id || game.gameId,
+          home_team: game.homeTeam || game.home_team,
+          away_team: game.awayTeam || game.away_team,
+          time: game.time || (game.dateTime ? new Date(game.dateTime).toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            timeZone: 'America/New_York',
+            hour12: false 
+          }) + ' ET' : 'TBD'),
+          home_score: game.homeScore || game.home_score || 0,
+          away_score: game.awayScore || game.away_score || 0,
+          status: game.status || 'Scheduled',
+          channel: game.channel || 'TBD',
+          date: formatDate(date),
+          arena: game.arena || null,
+          city: game.city || game.arenaCity || null,
+          source: 'RealDataService'
+        }));
+      }
+    } catch (serviceError) {
+      console.log('⚠️ RealDataService failed, trying SportsData API:', serviceError.message);
+    }
+    
+    // Fallback to SportsData API
     const apiKey = process.env.SPORTSDATA_API_KEY;
     
     if (!apiKey) {
-      console.log('⚠️  No SportsData API key found, using mock data');
+      console.log('⚠️ No SportsData API key found');
       return null;
     }
     
@@ -51,6 +87,7 @@ const fetchRealGamesData = async (date) => {
     );
     
     if (response.data && Array.isArray(response.data)) {
+      console.log(`✅ Fetched ${response.data.length} games from SportsData API`);
       return response.data.map(game => ({
         id: game.GameID,
         home_team: game.HomeTeam,
@@ -67,13 +104,14 @@ const fetchRealGamesData = async (date) => {
         channel: game.Channel || 'TBD',
         date: formattedDate,
         arena: game.Arena || null,
-        city: game.ArenaCity || null
+        city: game.ArenaCity || null,
+        source: 'SportsDataAPI'
       }));
     }
     
     return null;
   } catch (error) {
-    console.error('❌ SportsData API Error:', error.message);
+    console.error('❌ Both data services failed:', error.message);
     return null;
   }
 };
@@ -144,12 +182,33 @@ const getFallbackGames = (date) => {
 };
 
 const nbaController = {
-  // ===== GET ALL NBA GAMES =====
+  // ===== GET ALL NBA GAMES (INTEGRATED FROM FILE 1) =====
   getGames: async (req, res) => {
     try {
-      console.log('[NBA Controller] Getting all games (real data)');
+      console.log('[NBA Controller] Getting all games with integrated service');
       
-      // Try to get games for today, yesterday, and tomorrow
+      const { date } = req.query;
+      const gameDate = date ? new Date(date) : new Date();
+      
+      // Try the integrated approach first
+      try {
+        // Use RealDataService as the primary source
+        const gamesData = await realDataService.getNBAGames(gameDate);
+        
+        if (gamesData && gamesData.success !== false) {
+          return res.json({
+            success: true,
+            data: gamesData.games || gamesData,
+            count: (gamesData.games || gamesData).length,
+            source: 'RealDataService',
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (serviceError) {
+        console.log('⚠️ RealDataService failed, trying fallback approach:', serviceError.message);
+      }
+      
+      // Fallback to the existing approach
       const today = new Date();
       const yesterday = new Date(today.getTime() - 86400000);
       const tomorrow = new Date(today.getTime() + 86400000);
@@ -197,22 +256,104 @@ const nbaController = {
         data: filteredGames,
         count: filteredGames.length,
         timestamp: new Date().toISOString(),
-        source: allGames[0] && allGames[0].arena ? 'SportsData API' : 'Mock Data'
+        source: allGames[0] && allGames[0].source ? allGames[0].source : 'Mixed Sources'
       });
       
     } catch (error) {
       console.error('[NBA Controller] Error in getGames:', error);
       
-      // Fallback to mock data
-      const games = getFallbackGames(new Date());
-      res.json({
-        success: true,
-        data: games,
-        count: games.length,
-        timestamp: new Date().toISOString(),
-        source: 'Mock Data (Fallback)',
-        error: error.message
-      });
+      // Fallback to database (from File 1)
+      try {
+        const searchDate = req.query.date ? new Date(req.query.date) : new Date();
+        const games = await Game.find({ 
+          sport: 'NBA',
+          date: { 
+            $gte: new Date(searchDate.setHours(0, 0, 0, 0)),
+            $lte: new Date(searchDate.setHours(23, 59, 59, 999))
+          }
+        }).sort({ date: 1 });
+        
+        return res.json({
+          success: true,
+          data: games,
+          count: games.length,
+          source: 'database_fallback',
+          timestamp: new Date().toISOString()
+        });
+      } catch (dbError) {
+        // Final fallback to mock data
+        const games = getFallbackGames(new Date());
+        res.json({
+          success: true,
+          data: games,
+          count: games.length,
+          timestamp: new Date().toISOString(),
+          source: 'Mock Data (Final Fallback)',
+          error: error.message
+        });
+      }
+    }
+  },
+
+  // ===== GET NBA STANDINGS (INTEGRATED FROM FILE 1) =====
+  getStandings: async (req, res) => {
+    try {
+      console.log('[NBA Controller] Getting NBA standings');
+      
+      // Try RealDataService first
+      const standingsData = await realDataService.getNBAStandings();
+      
+      if (standingsData && standingsData.success !== false) {
+        return res.json({
+          success: true,
+          data: standingsData.standings || standingsData,
+          count: (standingsData.standings || standingsData).length,
+          source: 'RealDataService',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.error('NBA standings error:', error);
+      
+      // Fallback to database
+      try {
+        const standings = await Standing.find({ sport: 'NBA' })
+          .sort({ 'games.winPercentage': -1 });
+        
+        return res.json({
+          success: true,
+          data: standings,
+          count: standings.length,
+          source: 'database_fallback',
+          timestamp: new Date().toISOString()
+        });
+      } catch (dbError) {
+        // Final fallback: mock standings
+        const mockStandings = {
+          eastern: [
+            { team: 'Boston Celtics', wins: 35, losses: 10, winPercentage: 0.778 },
+            { team: 'Milwaukee Bucks', wins: 32, losses: 14, winPercentage: 0.696 },
+            { team: 'Philadelphia 76ers', wins: 29, losses: 16, winPercentage: 0.644 },
+            { team: 'New York Knicks', wins: 28, losses: 17, winPercentage: 0.622 },
+            { team: 'Cleveland Cavaliers', wins: 27, losses: 16, winPercentage: 0.628 }
+          ],
+          western: [
+            { team: 'Minnesota Timberwolves', wins: 34, losses: 14, winPercentage: 0.708 },
+            { team: 'Oklahoma City Thunder', wins: 32, losses: 15, winPercentage: 0.681 },
+            { team: 'Denver Nuggets', wins: 32, losses: 16, winPercentage: 0.667 },
+            { team: 'Los Angeles Clippers', wins: 30, losses: 15, winPercentage: 0.667 },
+            { team: 'New Orleans Pelicans', wins: 26, losses: 21, winPercentage: 0.553 }
+          ],
+          last_updated: new Date().toISOString()
+        };
+        
+        res.json({
+          success: true,
+          data: mockStandings,
+          source: 'Mock Data',
+          timestamp: new Date().toISOString()
+        });
+      }
     }
   },
 
@@ -233,8 +374,19 @@ const nbaController = {
       // If not cached, try to fetch real data
       console.log('🔄 [NBA Controller] Fetching fresh NBA games data');
       
-      let games = await fetchRealGamesData(today);
-      let source = 'SportsData API';
+      // Try integrated approach first
+      let games;
+      let source = 'RealDataService';
+      
+      try {
+        const gamesData = await realDataService.getNBAGames(today);
+        games = gamesData.games || gamesData;
+        source = 'RealDataService';
+      } catch (serviceError) {
+        console.log('⚠️ RealDataService failed, trying other sources:', serviceError.message);
+        games = await fetchRealGamesData(today);
+        source = games && games[0] && games[0].source ? games[0].source : 'Unknown';
+      }
       
       // Fallback to mock data if real API fails
       if (!games || games.length === 0) {
@@ -304,9 +456,19 @@ const nbaController = {
         return res.json(JSON.parse(cachedResponse));
       }
       
-      // Fetch fresh data
-      let games = await fetchRealGamesData(gameDate);
-      let source = 'SportsData API';
+      // Fetch fresh data using integrated approach
+      let games;
+      let source = 'RealDataService';
+      
+      try {
+        const gamesData = await realDataService.getNBAGames(gameDate);
+        games = gamesData.games || gamesData;
+        source = 'RealDataService';
+      } catch (serviceError) {
+        console.log(`⚠️ RealDataService failed for ${date}, trying other sources:`, serviceError.message);
+        games = await fetchRealGamesData(gameDate);
+        source = games && games[0] && games[0].source ? games[0].source : 'Unknown';
+      }
       
       // Fallback to mock data if real API fails
       if (!games || games.length === 0) {
@@ -554,10 +716,19 @@ const nbaController = {
       const today = new Date();
       const todayStr = formatDate(today);
       
-      // Test the API
-      let apiWorking = false;
-      let message = 'API not configured';
+      // Test the APIs
+      let realDataServiceStatus = 'Not tested';
+      let sportsDataApiStatus = 'Not configured';
       
+      // Test RealDataService
+      try {
+        await realDataService.getNBAGames(today);
+        realDataServiceStatus = 'Working';
+      } catch (serviceError) {
+        realDataServiceStatus = `Error: ${serviceError.message}`;
+      }
+      
+      // Test SportsData API if configured
       if (apiKey) {
         try {
           const response = await axios.get(
@@ -570,18 +741,19 @@ const nbaController = {
             }
           );
           
-          apiWorking = response.status === 200;
-          message = apiWorking ? 'API is working' : `API returned status ${response.status}`;
+          sportsDataApiStatus = response.status === 200 ? 'Working' : `Status ${response.status}`;
         } catch (apiError) {
-          message = `API error: ${apiError.message}`;
+          sportsDataApiStatus = `Error: ${apiError.message}`;
         }
       }
       
       res.json({
         success: true,
-        api_configured: !!apiKey,
-        api_working: apiWorking,
-        message: message,
+        services: {
+          realDataService: realDataServiceStatus,
+          sportsDataApi: sportsDataApiStatus
+        },
+        redis_connected: client.isReady,
         timestamp: new Date().toISOString()
       });
       

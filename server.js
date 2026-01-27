@@ -1,4 +1,4 @@
-// server.js - COMPLETE FIXED VERSION
+// server.js - COMPLETE FIXED VERSION with Fantasy Optimization Integration
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -20,6 +20,14 @@ import { authenticateToken } from './middleware/auth.js';
 
 // Import Database utility
 import Database from './utils/database.js';
+
+// ====================
+// NEW IMPORTS FROM FILE 1
+// ====================
+import { requestLogger, authLogger } from './middleware/logger.js';
+import { cacheMiddleware } from './middleware/cache.js';
+import DataSyncService from './services/dataSyncService.js';
+import RealDataService from './services/realDataService.js';
 
 // Import route modules
 import nbaRoutes from './routes/nbaRoutes.js';
@@ -76,6 +84,11 @@ import influencerRoutes from './routes/influencerRoutes.js';
 import influencerComplexRoutes from './routes/influencerComplexRoutes.js';
 import bumpRiskRoutes from './routes/bumpRiskRoutes.js';
 
+// Import Fantasy Optimization routes (from File 1)
+import fantasyDraftRoutes from './routes/fantasyDraftRoutes.js';
+import fantasyLineupRoutes from './routes/fantasyLineupRoutes.js';
+import fantasyOptimizationRoutes from './routes/fantasyOptimizationRoutes.js';
+
 // ====================
 // LOAD ENVIRONMENT VARIABLES
 // ====================
@@ -131,6 +144,26 @@ app.use(morgan('dev'));
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// ====================
+// RATE LIMITING FROM FILE 1
+// ====================
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 attempts
+  message: {
+    success: false,
+    message: 'Too many login attempts, please try again later'
+  }
+});
+
+app.use('/api/auth/login', authLimiter);
+
+// ====================
+// LOGGER MIDDLEWARE FROM FILE 1
+// ====================
+app.use(requestLogger);
+app.use('/api/auth', authLogger);
 
 // ====================
 // SAFE FIREBASE INITIALIZATION
@@ -251,7 +284,7 @@ const createMemoryCache = () => {
 };
 
 // ====================
-// MONGODB CONNECTION
+// UPDATED MONGODB CONNECTION FROM FILE 1
 // ====================
 const connectDB = async () => {
   try {
@@ -269,6 +302,20 @@ const connectDB = async () => {
     });
     
     console.log('✅ MongoDB connected successfully');
+    
+    // ====================
+    // DATA SYNC SERVICE INITIALIZATION FROM FILE 1
+    // ====================
+    const dataSyncService = new DataSyncService();
+    app.locals.dataSyncService = dataSyncService;
+    
+    // Start data sync (but wait a bit for server to be ready)
+    setTimeout(() => {
+      dataSyncService.start().catch(err => {
+        console.error('Failed to start data sync service:', err);
+      });
+    }, 10000); // Wait 10 seconds
+    
     return true;
   } catch (error) {
     console.error('❌ MongoDB connection failed:', error.message);
@@ -376,7 +423,7 @@ const createUserPreferencesRouter = () => {
 const userPreferencesRoutes = createUserPreferencesRouter();
 
 // ====================
-// RATE LIMITING
+// ADDITIONAL RATE LIMITING
 // ====================
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
@@ -706,6 +753,152 @@ app.get('/api/nba/games', async (req, res) => {
   }
 });
 
+// 17. Live Games API Root Handler (Added from File 1)
+app.get('/api/games', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Live Games API',
+    endpoints: [
+      '/api/games/live',
+      '/api/games/upcoming',
+      '/api/games/completed',
+      '/api/games/scores'
+    ],
+    data: {
+      sports: ['NBA', 'NFL', 'NHL', 'MLB'],
+      status: 'operational',
+      lastUpdate: new Date().toISOString()
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 18. Live Games Mock Endpoint (Added from File 1)
+app.get('/api/games/live', async (req, res) => {
+  try {
+    const mockLiveGames = [
+      {
+        id: 1,
+        sport: 'NBA',
+        homeTeam: 'Los Angeles Lakers',
+        awayTeam: 'Golden State Warriors',
+        status: 'live',
+        quarter: '4th',
+        time: '2:15',
+        score: { home: 98, away: 95 },
+        venue: 'Crypto.com Arena'
+      },
+      {
+        id: 2,
+        sport: 'NFL',
+        homeTeam: 'Kansas City Chiefs',
+        awayTeam: 'Buffalo Bills',
+        status: 'live',
+        quarter: '3rd',
+        time: '5:42',
+        score: { home: 21, away: 17 },
+        venue: 'Arrowhead Stadium'
+      }
+    ];
+    
+    res.json({
+      success: true,
+      games: mockLiveGames,
+      count: mockLiveGames.length,
+      lastUpdated: new Date().toISOString(),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching live games',
+      error: error.message
+    });
+  }
+});
+
+// ====================
+// DATA SYNC ENDPOINTS FROM FILE 1
+// ====================
+app.get('/api/sync/status', (req, res) => {
+  try {
+    const status = req.app.locals.dataSyncService?.getStatus() || {
+      isSyncing: false,
+      lastSync: null,
+      message: 'Data sync service not initialized'
+    };
+    
+    res.json({
+      success: true,
+      status,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Add sync trigger endpoint (admin only)
+app.post('/api/sync/trigger', authenticateToken, async (req, res) => {
+  try {
+    // Check if user is admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      });
+    }
+    
+    const { type } = req.body;
+    const syncService = req.app.locals.dataSyncService;
+    
+    if (!syncService) {
+      return res.status(503).json({
+        success: false,
+        error: 'Data sync service not available'
+      });
+    }
+    
+    let result;
+    switch(type) {
+      case 'games':
+        result = await syncService.syncGames();
+        break;
+      case 'standings':
+        result = await syncService.syncStandings();
+        break;
+      case 'players':
+        result = await syncService.syncPlayers();
+        break;
+      case 'projections':
+        result = await syncService.syncProjections();
+        break;
+      case 'all':
+        result = await syncService.syncAll();
+        break;
+      default:
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid sync type'
+        });
+    }
+    
+    res.json({
+      success: true,
+      message: `Sync triggered for ${type}`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // ====================
 // ROUTE MOUNTING
 // ====================
@@ -772,6 +965,11 @@ mountRoute('/api/influencer', influencerRoutes, 'influencerRoutes');
 mountRoute('/api/influencer-complex', influencerComplexRoutes, 'influencerComplexRoutes');
 mountRoute('/api/bump-risk', bumpRiskRoutes, 'bumpRiskRoutes');
 
+// Mount Fantasy Optimization routes (Added from File 1)
+mountRoute('/api/fantasy/draft', fantasyDraftRoutes, 'fantasyDraftRoutes');
+mountRoute('/api/fantasy/lineup', fantasyLineupRoutes, 'fantasyLineupRoutes');
+mountRoute('/api/fantasy/optimize', fantasyOptimizationRoutes, 'fantasyOptimizationRoutes');
+
 // Premium routes with authentication
 app.use('/api/premium', authenticateToken, premiumRoutes);
 
@@ -800,7 +998,8 @@ app.get('/api/health', async (req, res) => {
     },
     services: {
       firebase: !!app.locals.firebaseAdmin,
-      websocket: !!app.locals.wsServer
+      websocket: !!app.locals.wsServer,
+      dataSync: !!app.locals.dataSyncService
     },
     timestamp: new Date().toISOString()
   });
@@ -821,7 +1020,12 @@ app.get('/', (req, res) => {
       '/api/nba',
       '/api/auth',
       '/api/user',
-      '/api/prizepicks'
+      '/api/prizepicks',
+      '/api/games',
+      '/api/fantasy/draft',
+      '/api/fantasy/lineup',
+      '/api/fantasy/optimize',
+      '/api/sync/status'
     ]
   });
 });
@@ -847,13 +1051,74 @@ app.use('*', (req, res) => {
     success: false,
     error: 'Endpoint not found',
     path: req.originalUrl,
-    availableEndpoints: ['/health', '/api/health', '/api/nba', '/api/auth']
+    availableEndpoints: [
+      '/health', 
+      '/api/health', 
+      '/api/nba', 
+      '/api/auth',
+      '/api/games',
+      '/api/fantasy/draft',
+      '/api/fantasy/lineup',
+      '/api/fantasy/optimize',
+      '/api/sync/status'
+    ]
   });
+});
+
+// ====================
+// GRACEFUL SHUTDOWN HANDLERS FROM FILE 1
+// ====================
+const gracefulShutdown = (signal) => {
+  console.log(`\n🛑 Received ${signal}. Starting graceful shutdown...`);
+  
+  // 1. Close HTTP server
+  if (server) {
+    server.close(() => {
+      console.log('✅ HTTP server closed');
+    });
+  }
+  
+  // 2. Close database connections
+  if (mongoose.connection.readyState === 1) {
+    mongoose.connection.close(false, () => {
+      console.log('✅ MongoDB connection closed');
+    });
+  }
+  
+  // 3. Clear all intervals/timeouts
+  const intervalIds = Object.values(global).filter(
+    value => typeof value === 'number' && value > 0
+  );
+  intervalIds.forEach(clearInterval);
+  
+  // 4. Force exit after timeout
+  setTimeout(() => {
+    console.log('⚠️ Forcing shutdown...');
+    process.exit(0);
+  }, 5000);
+};
+
+// Listen for shutdown signals
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGUSR2', () => gracefulShutdown('SIGUSR2')); // For nodemon
+
+// Prevent unhandled rejections from keeping the process alive
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('⚠️ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit, just log
+});
+
+// Prevent uncaught exceptions from keeping the process alive
+process.on('uncaughtException', (error) => {
+  console.error('⚠️ Uncaught Exception:', error);
+  gracefulShutdown('uncaughtException');
 });
 
 // ====================
 // SERVER INITIALIZATION
 // ====================
+let server;
 const initializeServer = async () => {
   console.log('🚀 Initializing NBA Fantasy AI Backend...');
   
@@ -880,10 +1145,10 @@ const initializeServer = async () => {
     }
     
     // 5. Start HTTP server
-    const httpServer = createServer(app);
+    server = createServer(app);
     
     // 6. Initialize WebSocket server
-    const wsServer = new Server(httpServer, {
+    const wsServer = new Server(server, {
       cors: {
         origin: allowedOrigins,
         methods: ['GET', 'POST']
@@ -901,44 +1166,27 @@ const initializeServer = async () => {
     });
     
     // 7. Start server
-    httpServer.listen(PORT, HOST, () => {
+    server.listen(PORT, HOST, () => {
       console.log(`========================================`);
       console.log(`✅ Server running on http://${HOST}:${PORT}`);
       console.log(`🏥 Health: http://${HOST}:${PORT}/health`);
       console.log(`🔐 Auth API: http://${HOST}:${PORT}/api/auth`);
       console.log(`🎯 User API: http://${HOST}:${PORT}/api/user`);
       console.log(`📊 Analytics: http://${HOST}:${PORT}/api/analytics`);
+      console.log(`🎮 Games API: http://${HOST}:${PORT}/api/games`);
+      console.log(`🧙 Fantasy Draft: http://${HOST}:${PORT}/api/fantasy/draft`);
+      console.log(`📈 Fantasy Lineup: http://${HOST}:${PORT}/api/fantasy/lineup`);
+      console.log(`⚡ Fantasy Optimize: http://${HOST}:${PORT}/api/fantasy/optimize`);
+      console.log(`🔄 Data Sync Status: http://${HOST}:${PORT}/api/sync/status`);
       console.log(`========================================`);
     });
     
-    return httpServer;
+    return server;
   } catch (error) {
     console.error('❌ Failed to initialize server:', error.message);
     process.exit(1);
   }
 };
-
-// Graceful shutdown
-const shutdown = (signal) => {
-  console.log(`\n${signal} received. Shutting down gracefully...`);
-  
-  if (redisClient && redisClient.quit) {
-    redisClient.quit();
-    console.log('Redis connection closed');
-  }
-  
-  if (mongoose.connection.readyState === 1) {
-    mongoose.connection.close(false, () => {
-      console.log('MongoDB connection closed');
-      process.exit(0);
-    });
-  } else {
-    process.exit(0);
-  }
-};
-
-process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Start the server
 initializeServer();

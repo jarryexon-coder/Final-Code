@@ -63,6 +63,9 @@ class SportsApiScheduler {
   constructor() {
     this.balldontlieRequests = 0;
     this.balldontlieResetTime = Date.now();
+    this.balldontlieInterval = null; // Track interval for cleanup
+    this.balldontlieResetInterval = null; // Track reset interval for cleanup
+    this.activeIntervals = new Set(); // Track all intervals for graceful shutdown
     this.validateEnvironmentVariables();
     this.setupSchedulers();
     this.logSchedules();
@@ -181,35 +184,53 @@ class SportsApiScheduler {
     });
   }
 
-  // Ball Don't Lie API (60 requests/minute, 24/7)
+  // Ball Don't Lie API (60 requests/minute, 24/7) - FIXED VERSION
   setupBalldontlieScheduler() {
     // Reset counter every minute
-    setInterval(() => {
+    this.balldontlieResetInterval = setInterval(() => {
       this.balldontlieRequests = 0;
       this.balldontlieResetTime = Date.now();
+      console.log(`🔄 Ball Don't Lie rate limit reset. Requests: ${this.balldontlieRequests}`);
     }, 60000);
 
-    // Make requests respecting rate limit
-    setInterval(async () => {
+    this.activeIntervals.add(this.balldontlieResetInterval);
+
+    // Make requests at a sustainable rate (once per second max)
+    // This ensures 60 requests/minute maximum, but spaces them out evenly
+    this.balldontlieInterval = setInterval(async () => {
       if (this.balldontlieRequests < API_CONFIG.balldontlie.rateLimit) {
         const endpoint = this.getRandomEndpoint(API_CONFIG.balldontlie.endpoints);
         try {
           await this.makeAPIRequest(API_CONFIG.balldontlie, endpoint);
           this.balldontlieRequests++;
         } catch (error) {
+          // If we get a 429 error, wait before trying again
+          if (error.message && error.message.includes('429')) {
+            console.log('⏸️  Rate limit hit, pausing for 5 seconds...');
+            // Temporarily disable for 5 seconds
+            clearInterval(this.balldontlieInterval);
+            setTimeout(() => {
+              this.balldontlieInterval = setInterval(this.balldontlieRequestHandler.bind(this), 1000);
+            }, 5000);
+          }
           // Error already logged in makeAPIRequest
         }
+      } else {
+        console.log(`⏸️  Rate limit reached (${this.balldontlieRequests}/${API_CONFIG.balldontlie.rateLimit}), waiting for reset...`);
       }
-    }, 1000);
+    }, 1000); // CHANGED: Was 1000ms (1 second), keeping it at 1000ms but with better rate limiting
+
+    this.activeIntervals.add(this.balldontlieInterval);
   }
 
-  // The Odds API (every 20 minutes, 6pm-11:30pm ET)
+  // The Odds API Scheduler (every 20 minutes, 6pm-11:30pm ET)
   setupOddsScheduler() {
     cron.schedule(API_CONFIG.odds.schedule, async () => {
       if (this.isWithinTimeWindow(18, 23.5)) {
         try {
           await this.makeAPIRequest(API_CONFIG.odds);
         } catch (error) {
+          console.error(`❌ Failed to fetch odds: ${error.message}`);
           // Error already logged in makeAPIRequest
         }
       }
@@ -251,7 +272,8 @@ class SportsApiScheduler {
       balldontlie: {
         requestsThisMinute: this.balldontlieRequests,
         rateLimit: API_CONFIG.balldontlie.rateLimit,
-        resetIn: Math.max(0, 60000 - (Date.now() - this.balldontlieResetTime))
+        resetIn: Math.max(0, 60000 - (Date.now() - this.balldontlieResetTime)),
+        resetTime: new Date(this.balldontlieResetTime + 60000).toLocaleTimeString('en-US', {timeZone: 'America/New_York'})
       },
       schedules: Object.values(API_CONFIG).map(config => ({
         service: config.cacheKey,
@@ -277,6 +299,29 @@ class SportsApiScheduler {
     this.setupPredictionsScheduler();
     this.setupBalldontlieScheduler();
     this.setupOddsScheduler();
+  }
+
+  // Clean up all intervals for graceful shutdown
+  cleanup() {
+    console.log('🧹 Cleaning up scheduler intervals...');
+    
+    if (this.balldontlieInterval) {
+      clearInterval(this.balldontlieInterval);
+      console.log('✅ Cleared Ball Don\'t Lie interval');
+    }
+    
+    if (this.balldontlieResetInterval) {
+      clearInterval(this.balldontlieResetInterval);
+      console.log('✅ Cleared Ball Don\'t Lie reset interval');
+    }
+    
+    // Clear any other tracked intervals
+    this.activeIntervals.forEach(intervalId => {
+      clearInterval(intervalId);
+    });
+    this.activeIntervals.clear();
+    
+    console.log('✅ All scheduler intervals cleaned up');
   }
 }
 
@@ -314,10 +359,35 @@ function createSportsRoutes(scheduler) {
     res.json(scheduler.getStatus());
   });
 
+  // Manual cleanup endpoint (for development)
+  router.post('/cleanup', (req, res) => {
+    scheduler.cleanup();
+    res.json({ message: 'Scheduler intervals cleaned up' });
+  });
+
   return router;
 }
 
 // Initialize everything
 const sportsScheduler = new SportsApiScheduler();
+
+// Add graceful shutdown handler
+process.on('SIGINT', () => {
+  console.log('\n🛑 Received SIGINT (Ctrl+C). Cleaning up scheduler...');
+  sportsScheduler.cleanup();
+  setTimeout(() => {
+    console.log('✅ Graceful shutdown complete');
+    process.exit(0);
+  }, 1000);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\n🛑 Received SIGTERM. Cleaning up scheduler...');
+  sportsScheduler.cleanup();
+  setTimeout(() => {
+    console.log('✅ Graceful shutdown complete');
+    process.exit(0);
+  }, 1000);
+});
 
 export { sportsScheduler, createSportsRoutes };
