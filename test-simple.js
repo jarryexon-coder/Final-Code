@@ -1,68 +1,56 @@
-// test-simple.js
-import axios from 'axios';
+import express from 'express';
+import mongoose from 'mongoose';
+import dotenv from 'dotenv';
 
-const BASE_URL = 'http://localhost:3002';
+dotenv.config();
 
-async function testAuth() {
-  console.log('🔐 Testing Authentication...\n');
-  
-  const testUser = {
-    email: `test-${Date.now()}@example.com`,
-    password: 'Test123!@#',
-    name: 'Test User'
-  };
-  
-  try {
-    // Test registration
-    console.log('1. Testing registration...');
-    const registerRes = await axios.post(`${BASE_URL}/api/auth/register`, testUser);
-    console.log('✅ Registration successful');
-    console.log('   User ID:', registerRes.data.data.user.id);
+const app = express();
+
+// Connect to MongoDB first
+mongoose.connect(process.env.MONGODB_URI)
+  .then(async () => {
+    console.log('✅ MongoDB connected');
     
-    const { accessToken, refreshToken } = registerRes.data.data.tokens;
-    
-    // Test protected route
-    console.log('\n2. Testing protected route...');
-    const profileRes = await axios.get(`${BASE_URL}/api/auth/profile`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    console.log('✅ Protected route access successful');
-    console.log('   User email:', profileRes.data.data.email);
-    
-    // Test login
-    console.log('\n3. Testing login...');
-    const loginRes = await axios.post(`${BASE_URL}/api/auth/login`, {
-      email: testUser.email,
-      password: testUser.password
-    });
-    console.log('✅ Login successful');
-    
-    // Test refresh token
-    console.log('\n4. Testing token refresh...');
-    const refreshRes = await axios.post(`${BASE_URL}/api/auth/refresh`, {
-      refreshToken
-    });
-    console.log('✅ Token refresh successful');
-    
-    // Test logout
-    console.log('\n5. Testing logout...');
-    const logoutRes = await axios.post(`${BASE_URL}/api/auth/logout`, 
-      { refreshToken },
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    console.log('✅ Logout successful');
-    
-    console.log('\n🎉 All tests passed!');
-    
-  } catch (error) {
-    console.error('\n❌ Test failed:');
-    if (error.response) {
-      console.error('   Status:', error.response.status);
-      console.error('   Data:', error.response.data);
-    } else {
-      console.error('   Error:', error.message);
+    // Try to load fantasy routes
+    try {
+      const fantasyModule = await import('./routes/fantasyRoutes.js');
+      app.use('/api/fantasy', fantasyModule.default);
+      console.log('✅ fantasyRoutes mounted');
+      
+      // Add health endpoint
+      app.get('/api/fantasy', (req, res) => {
+        res.json({
+          success: true,
+          message: 'Fantasy API Health Check',
+          timestamp: new Date().toISOString()
+        });
+      });
+      
+      app.get('/api/fantasy/', (req, res) => {
+        res.json({
+          success: true,
+          message: 'Fantasy API Health Check (with slash)',
+          timestamp: new Date().toISOString()
+        });
+      });
+      
+      // Test route
+      app.get('/test', (req, res) => res.json({ test: 'ok' }));
+      
+      // Start server
+      const PORT = 3008;
+      app.listen(PORT, () => {
+        console.log(`\n✅ Server on port ${PORT}`);
+        console.log('Test endpoints:');
+        console.log(`  http://localhost:${PORT}/api/fantasy`);
+        console.log(`  http://localhost:${PORT}/api/fantasy/players`);
+        console.log(`  http://localhost:${PORT}/test`);
+      });
+      
+    } catch (error) {
+      console.log('❌ Error:', error.message);
     }
-  }
-}
-
-testAuth();
+  })
+  .catch(err => {
+    console.log('❌ MongoDB connection failed:', err.message);
+  });

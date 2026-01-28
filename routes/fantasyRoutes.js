@@ -5,6 +5,17 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// Root route
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Fantasy API is working',
+    endpoints: ['/players', '/players/:playerId', '/ai-advice'],
+    timestamp: new Date().toISOString()
+  });
+});
+
+
 // Get fantasy players with filtering
 router.get('/players', async (req, res) => {
   try {

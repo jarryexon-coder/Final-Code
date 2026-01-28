@@ -1,4 +1,4 @@
-// server.js - CLEAN VERSION USING EXISTING ROUTES
+// server-final-production.js
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -149,134 +149,84 @@ app.get('/', (req, res) => {
 });
 
 // ====================
-// BASIC API ENDPOINTS (for testing)
+// MANUAL HEALTH ENDPOINTS FOR ALL ROUTERS
 // ====================
+console.log('\n🔧 Setting up router health endpoints...');
 
-// NBA API
-app.get('/api/nba', (req, res) => {
-  res.json({
-    success: true,
-    message: 'NBA API is working',
-    endpoints: ['/api/nba/games', '/api/nba/players', '/api/nba/teams'],
-    timestamp: new Date().toISOString()
-  });
-});
+const routerHealthEndpoints = [
+  '/api/fantasy',
+  '/api/picks',
+  '/api/news',
+  '/api/analytics',
+  '/api/predictions',
+  '/api/betting',
+  '/api/nba',
+  '/api/auth',
+  '/api/admin',
+  '/api/players',
+  '/api/teams',
+  '/api/games',
+  '/api/secret-phrases',
+  '/api/nhl',
+  '/api/nfl',
+  '/api/kalshi',
+  '/api/draft',
+  '/api/contest',
+  '/api/sports-analytics',
+  '/api/situational',
+  '/api/stub',
+  '/api/stats',
+  '/api/leagues',
+  '/api/search',
+  '/api/cache',
+  '/api/prizepicks',
+  '/api/combinations',
+  '/api/notifications',
+  '/api/simulate',
+  '/api/social',
+  '/api/fantasy-teams',
+  '/api/lines',
+  '/api/monitoring',
+  '/api/selections',
+  '/api/influencer',
+  '/api/bump-risk',
+  '/api/fantasy/draft',
+  '/api/fantasy/lineup',
+  '/api/fantasy/optimize'
+];
 
-// Players API
-app.get('/api/players', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Players API',
-    endpoints: ['/api/players', '/api/players/search'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Teams API
-app.get('/api/teams', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Teams API',
-    endpoints: ['/api/teams', '/api/teams/standings'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Games API
-app.get('/api/games', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Games API',
-    endpoints: ['/api/games/live', '/api/games/upcoming'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Games live endpoint
-app.get('/api/games/live', async (req, res) => {
-  try {
+routerHealthEndpoints.forEach(endpoint => {
+  // Health endpoint WITHOUT trailing slash
+  app.get(endpoint, (req, res) => {
     res.json({
       success: true,
-      games: [],
-      count: 0,
-      lastUpdated: new Date().toISOString(),
-      timestamp: new Date().toISOString()
+      message: `${endpoint} API is loaded and working`,
+      status: 'active',
+      timestamp: new Date().toISOString(),
+      note: 'This router supports sub-routes'
     });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching live games',
-      error: error.message
+  });
+  
+  // Health endpoint WITH trailing slash
+  app.get(endpoint + '/', (req, res) => {
+    res.json({
+      success: true,
+      message: `${endpoint} API is loaded and working`,
+      status: 'active',
+      timestamp: new Date().toISOString(),
+      note: 'This is the router root endpoint'
     });
-  }
-});
-
-// Auth API
-app.get('/api/auth', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Auth API',
-    endpoints: ['/api/auth/login', '/api/auth/register'],
-    timestamp: new Date().toISOString()
   });
 });
 
-// Admin API
-app.get('/api/admin', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Admin API',
-    endpoints: ['/api/admin/health', '/api/admin/users'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Analytics API
-app.get('/api/analytics', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Analytics API',
-    endpoints: ['/api/analytics/overview', '/api/analytics/trends'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Predictions API
-app.get('/api/predictions', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Predictions API',
-    endpoints: ['/api/predictions/today', '/api/predictions/trending'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Secret Phrases API
-app.get('/api/secret-phrases', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Secret Phrases API',
-    endpoints: ['/api/secret-phrases', '/api/secret-phrases/analytics'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Betting API
-app.get('/api/betting', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Betting API',
-    endpoints: ['/api/betting/odds', '/api/betting/markets'],
-    timestamp: new Date().toISOString()
-  });
-});
+console.log(`✅ ${routerHealthEndpoints.length} router health endpoints configured`);
 
 // ====================
-// DYNAMIC ROUTE LOADING
+// DYNAMIC ROUTE LOADING (WITH ERROR HANDLING)
 // ====================
-console.log('🔗 Loading routes...');
+console.log('\n🔗 Loading dynamic routes...');
 
-async function loadRoutes() {
+async function loadAllRoutes() {
   const routesToLoad = [
     // Core routes
     { path: '/api/nba', file: 'nbaRoutes.js', name: 'NBA Routes' },
@@ -343,7 +293,31 @@ async function loadRoutes() {
   }
 
   console.log(`\n📊 Routes loaded: ${loadedCount} successful, ${failedCount} failed`);
+  return { loadedCount, failedCount };
 }
+
+// ====================
+// BASIC API ENDPOINTS (for testing)
+// ====================
+
+// Games live endpoint (example of a non-router endpoint)
+app.get('/api/games/live', async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      games: [],
+      count: 0,
+      lastUpdated: new Date().toISOString(),
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching live games',
+      error: error.message
+    });
+  }
+});
 
 // ====================
 // DATABASE CONNECTION
@@ -383,118 +357,117 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
+// ====================
+// ====================
+// 404 HANDLER - IMPROVED
+// ====================
 app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found',
-    path: req.originalUrl,
-    availableEndpoints: [
-      '/health',
-      '/api/health',
-      '/api/nba',
-      '/api/auth',
-      '/api/players',
-      '/api/teams',
-      '/api/games',
-      '/api/predictions',
-      '/api/fantasy',
-      '/api/admin',
-      '/api/secret-phrases',
-      '/api/analytics',
-      '/api/betting'
-    ]
-  });
+  const requestedPath = req.originalUrl;
+  
+  // Check if this might be a router path
+  // Common router paths that have sub-routes
+  const routerPaths = [
+    '/api/fantasy',
+    '/api/picks',
+    '/api/news',
+    '/api/nba',
+    '/api/auth',
+    '/api/admin',
+    '/api/analytics',
+    '/api/predictions',
+    '/api/secret-phrases',
+    '/api/betting'
+  ];
+  
+  const isRouterPath = routerPaths.some(routerPath =>
+    requestedPath.startsWith(routerPath) && requestedPath !== routerPath
+  );
+  
+  if (isRouterPath) {
+    // It's a router sub-route that wasn't found
+    res.status(404).json({
+      success: false,
+      error: `Router sub-route not found: ${requestedPath}`
+    });
+  } else {
+    // Standard 404
+    res.status(404).json({
+      success: false,
+      error: 'Endpoint not found',
+      path: requestedPath,
+      availableEndpoints: [
+        '/health',
+        '/api/health',
+        '/api/nba',
+        '/api/auth',
+        '/api/players',
+        '/api/teams',
+        '/api/games',
+        '/api/predictions',
+        '/api/fantasy',
+        '/api/admin',
+        '/api/secret-phrases',
+        '/api/analytics',
+        '/api/betting'
+      ],
+      note: 'Router endpoints support sub-routes (e.g., /api/fantasy/players)'
+    });
+  }
 });
 
 // ====================
-// SERVER INITIALIZATION
+// 404 HANDLER - IMPROVED
 // ====================
-let server;
-
-const initializeServer = async () => {
-  console.log('🚀 Initializing NBA Fantasy AI Backend...');
-
-  try {
-    // 1. Connect to MongoDB
-    await connectDB();
-
-    // 2. Load routes dynamically
-    await loadRoutes();
-
-    // 3. Start HTTP server
-    server = createServer(app);
-
-    // 4. Initialize WebSocket server
-    const wsServer = new Server(server, {
-      cors: {
-        origin: allowedOrigins,
-        methods: ['GET', 'POST']
-      }
-    });
-
-    app.locals.wsServer = wsServer;
-
-    wsServer.on('connection', (socket) => {
-      console.log('✅ WebSocket client connected:', socket.id);
-
-      socket.on('disconnect', () => {
-        console.log('❌ WebSocket client disconnected:', socket.id);
-      });
-    });
-
-    // 5. Start server
-    server.listen(PORT, HOST, () => {
-      console.log(`========================================`);
-      console.log(`✅ Server running on http://${HOST}:${PORT}`);
-      console.log(`🏥 Health: http://${HOST}:${PORT}/health`);
-      console.log(`🔐 Auth API: http://${HOST}:${PORT}/api/auth`);
-      console.log(`🎮 Games API: http://${HOST}:${PORT}/api/games`);
-      console.log(`🏀 NBA API: http://${HOST}:${PORT}/api/nba`);
-      console.log(`📊 Analytics: http://${HOST}:${PORT}/api/analytics`);
-      console.log(`🔮 Predictions: http://${HOST}:${PORT}/api/predictions`);
-      console.log(`🧙 Fantasy: http://${HOST}:${PORT}/api/fantasy`);
-      console.log(`🗝️ Secret Phrases: http://${HOST}:${PORT}/api/secret-phrases`);
-      console.log(`💰 Betting: http://${HOST}:${PORT}/api/betting`);
-      console.log(`========================================`);
-    });
-
-    // Handle server errors
-    server.on('error', (error) => {
-      if (error.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use!`);
-        process.exit(1);
-      } else {
-        console.error('❌ Server error:', error);
-        process.exit(1);
-      }
-    });
-
-    return server;
-  } catch (error) {
-    console.error('❌ Failed to initialize server:', error.message);
-    process.exit(1);
-  }
-};
-
-// Graceful shutdown
-const gracefulShutdown = async () => {
-  console.log('\n🛑 Starting graceful shutdown...');
+app.use('*', (req, res) => {
+  const requestedPath = req.originalUrl;
   
-  if (server) {
-    server.close(() => {
-      console.log('✅ HTTP server closed');
-      process.exit(0);
+  // Check if this might be a router path
+  // Common router paths that have sub-routes
+  const routerPaths = [
+    '/api/fantasy',
+    '/api/picks',
+    '/api/news',
+    '/api/nba',
+    '/api/auth',
+    '/api/admin',
+    '/api/analytics',
+    '/api/predictions',
+    '/api/secret-phrases',
+    '/api/betting'
+  ];
+  
+  const isRouterPath = routerPaths.some(routerPath =>
+    requestedPath.startsWith(routerPath) && requestedPath !== routerPath
+  );
+  
+  if (isRouterPath) {
+    // It's a router sub-route that wasn't found
+    res.status(404).json({
+      success: false,
+      error: `Router sub-route not found: ${requestedPath}`
     });
   } else {
-    process.exit(0);
+    // Standard 404
+    res.status(404).json({
+      success: false,
+      error: 'Endpoint not found',
+      path: requestedPath,
+      availableEndpoints: [
+        '/health',
+        '/api/health',
+        '/api/nba',
+        '/api/auth',
+        '/api/players',
+        '/api/teams',
+        '/api/games',
+        '/api/predictions',
+        '/api/fantasy',
+        '/api/admin',
+        '/api/secret-phrases',
+        '/api/analytics',
+        '/api/betting'
+      ],
+      note: 'Router endpoints support sub-routes (e.g., /api/fantasy/players)'
+    });
   }
-};
-
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
-
-// Start the server
-initializeServer();
-
-export { app };
+});

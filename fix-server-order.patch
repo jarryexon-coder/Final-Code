@@ -1,0 +1,66 @@
+--- server.js.orig
++++ server.js.fixed
+@@ -160,30 +160,6 @@
+   });
+ });
+ 
+-// ====================
+-// BASIC API ENDPOINTS (for testing)
+-// ====================
+-
+-// NBA API
+-app.get('/api/nba', (req, res) => {
+-  res.json({
+-    success: true,
+-    message: 'NBA API is working',
+-    endpoints: ['/api/nba/games', '/api/nba/players', '/api/nba/teams'],
+-    timestamp: new Date().toISOString()
+-  });
+-});
+-
+-// Players API
+-app.get('/api/players', (req, res) => {
+-  res.json({
+-    success: true,
+-    message: 'Players API',
+-    endpoints: ['/api/players', '/api/players/search'],
+-    timestamp: new Date().toISOString()
+-  });
+-});
+-
+-// ... REMOVE ALL OTHER STATIC API ROUTE DEFINITIONS ...
+-
+ // ====================
+ // DYNAMIC ROUTE LOADING
+@@ -423,8 +399,35 @@
+   console.log(`\n📊 Routes loaded: ${loadedCount} successful, ${failedCount} failed`);
+ }
+ 
++// ====================
++// BASIC API ENDPOINTS (AFTER dynamic routes)
++// ====================
++
++// Only define root endpoints that don't conflict with dynamic routes
++app.get('/api/nba', (req, res) => {
++  res.json({
++    success: true,
++    message: 'NBA API is working',
++    endpoints: ['/api/nba/games', '/api/nba/players', '/api/nba/teams'],
++    timestamp: new Date().toISOString()
++  });
++});
++
++app.get('/api/players', (req, res) => {
++  res.json({
++    success: true,
++    message: 'Players API',
++    endpoints: ['/api/players', '/api/players/search'],
++    timestamp: new Date().toISOString()
++  });
++});
++
++// ... KEEP OTHER STATIC ROUTES THAT DON'T CONFLICT ...
++
+ // ====================
+ // DATABASE CONNECTION
+ // ====================

@@ -1,6 +1,17 @@
 // routes/news.js - Updated to use YOUR available APIs
 import express from 'express';
 const router = express.Router();
+
+// Root News route
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'News API is working',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
 import axios from 'axios';
 
 // Use your existing API keys from environment

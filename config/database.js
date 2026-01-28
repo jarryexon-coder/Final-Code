@@ -8,8 +8,6 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/nba-ap
 
 // Connection options
 const connectionOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
   family: 4,

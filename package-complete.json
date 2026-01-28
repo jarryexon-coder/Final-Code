@@ -1,0 +1,76 @@
+{
+  "name": "nba-fantasy-ai-backend",
+  "version": "5.0.0",
+  "description": "NBA Fantasy AI Backend with real-time data, predictions, and analytics",
+  "main": "server-final-production.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server-final-production.js",
+    "dev": "nodemon server-final-production.js",
+    "test": "node railway-verify.js",
+    "deploy:verify": "node railway-verify.js",
+    "deploy": "git push railway main",
+    "install:all": "npm install axios joi bcryptjs jsonwebtoken redis @google-cloud/firestore firebase-admin moment-timezone node-cron node-cache dotenv socket.io express-rate-limit mongoose cors helmet compression morgan"
+  },
+  "dependencies": {
+    // Core Express
+    "express": "^4.18.2",
+    "mongoose": "^8.0.0",
+    "cors": "^2.8.5",
+    "helmet": "^7.0.0",
+    "compression": "^1.7.4",
+    "morgan": "^1.10.0",
+    "dotenv": "^16.3.1",
+    
+    // WebSocket
+    "socket.io": "^4.7.2",
+    
+    // Security & Rate Limiting
+    "express-rate-limit": "^6.10.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2",
+    
+    // HTTP Clients
+    "axios": "^1.6.2",
+    "node-fetch": "^3.3.2",
+    
+    // Validation
+    "joi": "^17.11.0",
+    
+    // Caching
+    "redis": "^4.6.12",
+    "node-cache": "^5.1.2",
+    
+    // Scheduling
+    "node-cron": "^3.0.2",
+    
+    // Utilities
+    "moment-timezone": "^0.5.43",
+    
+    // Firebase (optional - only if needed)
+    "@google-cloud/firestore": "^7.11.0",
+    "firebase-admin": "^12.0.0",
+    
+    // Other utilities
+    "crypto-js": "^4.2.0",
+    "lodash": "^4.17.21",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "nba",
+    "fantasy",
+    "ai",
+    "betting",
+    "analytics",
+    "sports"
+  ],
+  "author": "NBA Fantasy AI Team",
+  "license": "MIT"
+}

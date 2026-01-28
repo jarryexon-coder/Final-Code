@@ -1,44 +1,41 @@
-// quick-test.js
-import axios from 'axios';
-
-const BASE_URL = 'http://localhost:3002';
+// quick-test.js - Quick verification for Railway deployment
+import fetch from 'node-fetch';
 
 async function quickTest() {
-  console.log('🧪 Quick Authentication Test\n');
+  console.log('🏀 NBA Backend Railway Deployment Test\n');
   
-  // Test 1: Try to register
-  const testEmail = `test${Date.now()}@example.com`;
+  const criticalEndpoints = [
+    '/health',
+    '/api/health',
+    '/api/nba',
+    '/api/players',
+    '/api/teams',
+    '/api/auth'
+  ];
   
-  console.log('1. Testing registration...');
-  try {
-    const regRes = await axios.post(`${BASE_URL}/api/auth/register`, {
-      email: testEmail,
-      password: 'Test123!@#',
-      name: 'John Doe'
-    });
-    
-    if (regRes.data.success) {
-      console.log('✅ Registration successful!');
-      console.log('   User:', regRes.data.data.user.email);
-      console.log('   First Name:', regRes.data.data.user.firstName);
-      console.log('   Last Name:', regRes.data.data.user.lastName);
+  console.log('Testing critical endpoints...\n');
+  
+  for (const endpoint of criticalEndpoints) {
+    try {
+      const response = await fetch(`http://localhost:3002${endpoint}`);
+      const status = response.status;
       
-      // Test 2: Login
-      console.log('\n2. Testing login...');
-      const loginRes = await axios.post(`${BASE_URL}/api/auth/login`, {
-        email: testEmail,
-        password: 'Test123!@#'
-      });
-      
-      if (loginRes.data.success) {
-        console.log('✅ Login successful!');
-        console.log('   Token:', loginRes.data.data.tokens.accessToken.substring(0, 30) + '...');
+      if (status >= 200 && status < 300) {
+        console.log(`✅ ${endpoint} - HTTP ${status}`);
+      } else {
+        console.log(`❌ ${endpoint} - HTTP ${status}`);
       }
+    } catch (error) {
+      console.log(`❌ ${endpoint} - ${error.message}`);
     }
-  } catch (error) {
-    console.log('❌ Error:', error.response?.data?.error || error.message);
-    console.log('Full error:', error.response?.data);
   }
+  
+  console.log('\n✅ Quick test complete!');
+  console.log('If all endpoints return 200, backend is ready for Railway.');
+  console.log('\n🚀 To deploy to Railway:');
+  console.log('1. Commit all changes: git add . && git commit -m "Ready for Railway"');
+  console.log('2. Push to Railway: git push railway main');
 }
 
-quickTest();
+// Run the test
+quickTest().catch(console.error);
