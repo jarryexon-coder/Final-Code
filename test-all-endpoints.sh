@@ -1,33 +1,42 @@
 #!/bin/bash
 
-echo "🧪 Testing All Backend Endpoints"
-echo "================================="
+BASE_URL="http://localhost:3002"
+echo "🧪 Testing NBA Fantasy AI Backend at $BASE_URL"
 
-echo ""
-echo "1. Health Check:"
-curl -s http://10.0.0.183:3000/api/promo/health | python3 -m json.tool
+# Test endpoints
+endpoints=(
+  "/health"
+  "/api/health"
+  "/api/debug"
+  "/api/auth"
+  "/api/auth/register"
+  "/api/auth/health"
+  "/api/nba"
+  "/api/fantasy"
+  "/api/predictions"
+  "/api/games"
+  "/api/players"
+  "/api/teams"
+  "/api/analytics"
+  "/api/betting"
+  "/api/admin"
+  "/api/secret-phrases"
+  "/api/news"
+)
 
-echo ""
-echo "2. Public Promo Codes:"
-curl -s http://10.0.0.183:3000/api/promo/public | python3 -m json.tool
-
-echo ""
-echo "3. Validate WELCOME10 (user 999):"
-curl -s -X POST http://10.0.0.183:3000/api/promo/validate \
-  -H "Content-Type: application/json" \
-  -d '{"code": "WELCOME10", "userId": 999}' | python3 -m json.tool
-
-echo ""
-echo "4. Influencer Directory:"
-curl -s http://10.0.0.183:3000/api/influencer/directory/public | python3 -m json.tool
-
-echo ""
-echo "5. Influencer Analytics (ID 1):"
-curl -s http://10.0.0.183:3000/api/influencer/1/analytics | python3 -m json.tool | head -30
-
-echo ""
-echo "6. NBA Games Today:"
-curl -s http://10.0.0.183:3000/api/nba/games/today | python3 -m json.tool
-
-echo ""
-echo "✅ All tests completed!"
+echo "========================================="
+for endpoint in "${endpoints[@]}"; do
+  echo -n "Testing $endpoint... "
+  response=$(curl -s -o /dev/null -w "%{http_code}" "${BASE_URL}${endpoint}")
+  if [ "$response" = "200" ] || [ "$response" = "201" ]; then
+    echo "✅ ($response)"
+  else
+    echo "❌ ($response)"
+    # Show error details
+    curl -s "${BASE_URL}${endpoint}" | head -c 200
+    echo ""
+  fi
+  sleep 0.1 # Small delay to avoid overwhelming
+done
+echo "========================================="
+echo "✅ Testing complete!"

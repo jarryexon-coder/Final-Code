@@ -1,91 +1,37 @@
-// models/User-no-middleware.js
+// models/User.js
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
-  password: {
-    type: String,
-    required: true
-  },
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  firstName: {
-    type: String,
-    default: function() {
-      if (this.name) {
-        const parts = this.name.trim().split(/\s+/);
-        return parts[0] || 'User';
-      }
-      return 'User';
-    }
-  },
-  lastName: {
-    type: String,
-    default: function() {
-      if (this.name) {
-        const parts = this.name.trim().split(/\s+/);
-        return parts.length > 1 ? parts.slice(1).join(' ') : 'User';
-      }
-      return 'User';
-    }
-  },
-  role: {
-    type: String,
-    default: 'user'
-  },
-  status: {
-    type: String,
-    default: 'active'
-  },
-  subscription: {
-    status: { type: String, default: 'inactive' },
-    plan: { type: String, default: 'free' }
+  email: { type: String, required: true, unique: true, lowercase: true },
+  password: { type: String, required: true },
+  name: { type: String, required: true },
+  role: { type: String, default: 'user', enum: ['user', 'admin', 'premium'] },
+  avatar: String,
+  fantasyTeams: [{ type: mongoose.Schema.Types.ObjectId, ref: 'FantasyTeam' }],
+  preferences: {
+    notifications: { type: Boolean, default: true },
+    theme: { type: String, default: 'light' }
   },
   stats: {
-    loginCount: { type: Number, default: 0 },
-    lastLogin: { type: Date, default: null }
-  }
-}, {
-  timestamps: true
+    predictions: { type: Number, default: 0 },
+    accuracy: { type: Number, default: 0 },
+    wins: { type: Number, default: 0 }
+  },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
-// NO pre-save middleware - we'll handle hashing manually
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  this.password = await bcrypt.hash(this.password, 12);
+  next();
+});
 
-// Static method to create user with hashed password
-userSchema.statics.createUser = async function(userData) {
-  // Hash password before creating
-  const salt = bcrypt.genSaltSync(10);
-  const hashedPassword = bcrypt.hashSync(userData.password, salt);
-  
-  // Set firstName and lastName from name
-  const nameParts = userData.name.trim().split(/\s+/);
-  const firstName = nameParts[0] || 'User';
-  const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : 'User';
-  
-  const user = new this({
-    ...userData,
-    password: hashedPassword,
-    firstName,
-    lastName
-  });
-  
-  return user.save();
+// Compare password method
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// Instance method to compare password
-userSchema.methods.comparePassword = function(candidatePassword) {
-  return bcrypt.compareSync(candidatePassword, this.password);
-};
-
-const User = mongoose.model('User', userSchema);
-export default User;
+export default mongoose.model('User', userSchema);

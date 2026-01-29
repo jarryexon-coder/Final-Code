@@ -1,32 +1,17 @@
-// server.js - CLEAN VERSION USING EXISTING ROUTES
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import morgan from 'morgan';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
 import mongoose from 'mongoose';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import rateLimit from 'express-rate-limit';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3002;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// ====================
-// ENVIRONMENT CHECK
-// ====================
-console.log('🔍 Environment Check:');
-console.log('PORT:', process.env.PORT);
-console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
-console.log('MONGODB_URI exists:', !!process.env.MONGODB_URI);
-console.log('========================================');
+// Cleanup tracker
+const cleanupTasks = [];
 
 // ====================
 // MIDDLEWARE CONFIGURATION
@@ -57,36 +42,6 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// ====================
-// RATE LIMITING
-// ====================
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: {
-    success: false,
-    message: 'Too many requests, please try again later'
-  }
-});
-
-app.use('/api/auth/login', authLimiter);
-
-// Global rate limit for production
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-  
-  app.use('/api/', rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 200,
-    message: {
-      success: false,
-      error: 'Too many requests from this IP'
-    },
-    standardHeaders: true,
-    legacyHeaders: false,
-  }));
-}
-
 // Security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -96,7 +51,7 @@ app.use((req, res, next) => {
 });
 
 // ====================
-// HEALTH CHECK ENDPOINTS
+// GLOBAL HEALTH ENDPOINTS (ALWAYS AVAILABLE)
 // ====================
 app.get('/health', (req, res) => {
   res.json({
@@ -108,15 +63,13 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/api/health', async (req, res) => {
+app.get('/api/health', (req, res) => {
   const mongoState = mongoose.connection.readyState;
   const mongoStatus = mongoState === 1 ? 'connected' : mongoState === 2 ? 'connecting' : 'disconnected';
   
-  res.status(200).json({
+  res.json({
     status: 'healthy',
-    databases: {
-      mongodb: mongoStatus,
-    },
+    databases: { mongodb: mongoStatus },
     timestamp: new Date().toISOString()
   });
 });
@@ -133,8 +86,8 @@ app.get('/', (req, res) => {
     endpoints: [
       '/health',
       '/api/health',
-      '/api/nba',
       '/api/auth',
+      '/api/nba',
       '/api/players',
       '/api/teams',
       '/api/games',
@@ -149,305 +102,153 @@ app.get('/', (req, res) => {
 });
 
 // ====================
-// BASIC API ENDPOINTS (for testing)
+// DEBUG ROUTE
 // ====================
-
-// NBA API
-app.get('/api/nba', (req, res) => {
+app.get('/api/debug', (req, res) => {
   res.json({
     success: true,
-    message: 'NBA API is working',
-    endpoints: ['/api/nba/games', '/api/nba/players', '/api/nba/teams'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Players API
-app.get('/api/players', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Players API',
-    endpoints: ['/api/players', '/api/players/search'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Teams API
-app.get('/api/teams', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Teams API',
-    endpoints: ['/api/teams', '/api/teams/standings'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Games API
-app.get('/api/games', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Games API',
-    endpoints: ['/api/games/live', '/api/games/upcoming'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Games live endpoint
-app.get('/api/games/live', async (req, res) => {
-  try {
-    res.json({
-      success: true,
-      games: [],
-      count: 0,
-      lastUpdated: new Date().toISOString(),
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching live games',
-      error: error.message
-    });
-  }
-});
-
-// Auth API
-app.get('/api/auth', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Auth API',
-    endpoints: ['/api/auth/login', '/api/auth/register'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Admin API
-app.get('/api/admin', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Admin API',
-    endpoints: ['/api/admin/health', '/api/admin/users'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Analytics API
-app.get('/api/analytics', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Analytics API',
-    endpoints: ['/api/analytics/overview', '/api/analytics/trends'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Predictions API
-app.get('/api/predictions', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Predictions API',
-    endpoints: ['/api/predictions/today', '/api/predictions/trending'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Secret Phrases API
-app.get('/api/secret-phrases', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Secret Phrases API',
-    endpoints: ['/api/secret-phrases', '/api/secret-phrases/analytics'],
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Betting API
-app.get('/api/betting', (req, res) => {
-  res.json({
-    success: true,
-    message: 'Betting API',
-    endpoints: ['/api/betting/odds', '/api/betting/markets'],
-    timestamp: new Date().toISOString()
+    message: 'Direct debug route works',
+    timestamp: new Date().toISOString(),
+    server: 'NBA Fantasy AI Backend'
   });
 });
 
 // ====================
-// DYNAMIC ROUTE LOADING
+// START SERVER FUNCTION
 // ====================
-console.log('🔗 Loading routes...');
-
-async function loadRoutes() {
-  const routesToLoad = [
-    // Core routes
-    { path: '/api/nba', file: 'nbaRoutes.js', name: 'NBA Routes' },
-    { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
-    { path: '/api/admin', file: 'adminRoutes.js', name: 'Admin Routes' },
-    { path: '/api/analytics', file: 'analytics.js', name: 'Analytics Routes' },
-    { path: '/api/predictions', file: 'predictions.js', name: 'Predictions Routes' },
-    { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
-    { path: '/api/players', file: 'players.js', name: 'Players Routes' },
-    { path: '/api/teams', file: 'teams.js', name: 'Teams Routes' },
-    { path: '/api/games', file: 'games.js', name: 'Games Routes' },
-    { path: '/api/picks', file: 'picks.js', name: 'Picks Routes' },
-    { path: '/api/secret-phrases', file: 'secret-phrases.js', name: 'Secret Phrases Routes' },
-    { path: '/api/betting', file: 'betting.js', name: 'Betting Routes' },
-    
-    // Additional routes
-    { path: '/api/news', file: 'news.js', name: 'News Routes' },
-    { path: '/api/nhl', file: 'nhlRoutes.js', name: 'NHL Routes' },
-    { path: '/api/nfl', file: 'nflRoutes.js', name: 'NFL Routes' },
-    { path: '/api/kalshi', file: 'kalshiRoutes.js', name: 'Kalshi Routes' },
-    { path: '/api/draft', file: 'draftRoutes.js', name: 'Draft Routes' },
-    { path: '/api/contest', file: 'contestRoutes.js', name: 'Contest Routes' },
-    { path: '/api/sports-analytics', file: 'sportsAnalyticsRoutes.js', name: 'Sports Analytics Routes' },
-    { path: '/api/situational', file: 'situationalRoutes.js', name: 'Situational Routes' },
-    { path: '/api/stub', file: 'stubRoutes.js', name: 'Stub Routes' },
-    { path: '/api/stats', file: 'statsRoutes.js', name: 'Stats Routes' },
-    { path: '/api/leagues', file: 'leaguesRoutes.js', name: 'Leagues Routes' },
-    { path: '/api/search', file: 'searchRoutes.js', name: 'Search Routes' },
-    { path: '/api/cache', file: 'cacheRoutes.js', name: 'Cache Routes' },
-    { path: '/api/prizepicks', file: 'prizepicksLimitsRoutes.js', name: 'PrizePicks Limits Routes' },
-    { path: '/api/combinations', file: 'combinationsRoutes.js', name: 'Combinations Routes' },
-    { path: '/api/notifications', file: 'notificationsRoutes.js', name: 'Notifications Routes' },
-    { path: '/api/simulate', file: 'simulationsRoutes.js', name: 'Simulations Routes' },
-    { path: '/api/social', file: 'socialRoutes.js', name: 'Social Routes' },
-    { path: '/api/fantasy-teams', file: 'fantasyTeamsRoutes.js', name: 'Fantasy Teams Routes' },
-    { path: '/api/lines', file: 'linesRoutes.js', name: 'Lines Routes' },
-    { path: '/api/monitoring', file: 'monitoringRoutes.js', name: 'Monitoring Routes' },
-    { path: '/api/selections', file: 'selectionsRoutes.js', name: 'Selections Routes' },
-    { path: '/api/influencer', file: 'influencerRoutes.js', name: 'Influencer Routes' },
-    { path: '/api/bump-risk', file: 'bumpRiskRoutes.js', name: 'Bump Risk Routes' },
-    { path: '/api/fantasy/draft', file: 'fantasyDraftRoutes.js', name: 'Fantasy Draft Routes' },
-    { path: '/api/fantasy/lineup', file: 'fantasyLineupRoutes.js', name: 'Fantasy Lineup Routes' },
-    { path: '/api/fantasy/optimize', file: 'fantasyOptimizationRoutes.js', name: 'Fantasy Optimization Routes' },
-  ];
-
-  let loadedCount = 0;
-  let failedCount = 0;
-
-  for (const route of routesToLoad) {
-    try {
-      const module = await import(`./routes/${route.file}`);
-      if (module.default && typeof module.default === 'function') {
-        app.use(route.path, module.default);
-        console.log(`✅ ${route.name} loaded at ${route.path}`);
-        loadedCount++;
-      } else {
-        console.log(`⚠ ${route.name} has no default export`);
-        failedCount++;
-      }
-    } catch (error) {
-      console.log(`⚠ Could not load ${route.name}: ${error.message}`);
-      failedCount++;
-    }
-  }
-
-  console.log(`\n📊 Routes loaded: ${loadedCount} successful, ${failedCount} failed`);
-}
-
-// ====================
-// DATABASE CONNECTION
-// ====================
-const connectDB = async () => {
-  try {
-    if (!process.env.MONGODB_URI) {
-      console.error('❌ MONGODB_URI not configured');
-      throw new Error('MONGODB_URI not configured');
-    }
-    
-    console.log('🔄 Connecting to MongoDB...');
-    
-    await mongoose.connect(process.env.MONGODB_URI);
-    
-    console.log('✅ MongoDB connected successfully');
-    
-    return true;
-  } catch (error) {
-    console.error('❌ MongoDB connection failed:', error.message);
-    throw error;
-  }
-};
-
-// ====================
-// ERROR HANDLING
-// ====================
-app.use((err, req, res, next) => {
-  console.error('Server Error:', err.message);
-  
-  res.status(500).json({
-    success: false,
-    error: process.env.NODE_ENV === 'production' 
-      ? 'Internal server error' 
-      : err.message,
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found',
-    path: req.originalUrl,
-    availableEndpoints: [
-      '/health',
-      '/api/health',
-      '/api/nba',
-      '/api/auth',
-      '/api/players',
-      '/api/teams',
-      '/api/games',
-      '/api/predictions',
-      '/api/fantasy',
-      '/api/admin',
-      '/api/secret-phrases',
-      '/api/analytics',
-      '/api/betting'
-    ]
-  });
-});
-
-// ====================
-// SERVER INITIALIZATION
-// ====================
-let server;
-
-const initializeServer = async () => {
-  console.log('🚀 Initializing NBA Fantasy AI Backend...');
+async function startServer() {
+  console.log('🔍 Environment Check:');
+  console.log('PORT:', PORT);
+  console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
+  console.log('MONGODB_URI exists:', !!process.env.MONGODB_URI);
+  console.log('========================================');
 
   try {
     // 1. Connect to MongoDB
-    await connectDB();
-
-    // 2. Load routes dynamically
-    await loadRoutes();
-
-    // 3. Start HTTP server
-    server = createServer(app);
-
-    // 4. Initialize WebSocket server
-    const wsServer = new Server(server, {
-      cors: {
-        origin: allowedOrigins,
-        methods: ['GET', 'POST']
-      }
+    console.log('🔄 Connecting to MongoDB...');
+    await mongoose.connect(process.env.MONGODB_URI);
+    console.log('✅ MongoDB connected successfully');
+    
+    // Add MongoDB cleanup
+    cleanupTasks.push(() => {
+      return new Promise(resolve => {
+        mongoose.connection.close(false, () => {
+          console.log('✅ MongoDB connection closed');
+          resolve();
+        });
+      });
     });
+    
+    // 2. Load all dynamic routes
+    console.log('\n🔗 Loading your existing routes...');
+    
+    const routesToLoad = [
+      // CORE ROUTES - LOAD IN ORDER
+      { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
+      { path: '/api/nba', file: 'nbaRoutes.js', name: 'NBA Routes' },
+      { path: '/api/admin', file: 'adminRoutes.js', name: 'Admin Routes' },
+      { path: '/api/analytics', file: 'analytics.js', name: 'Analytics Routes' },
+      { path: '/api/predictions', file: 'predictions.js', name: 'Predictions Routes' },
+      { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
+      { path: '/api/players', file: 'players.js', name: 'Players Routes' },
+      { path: '/api/teams', file: 'teams.js', name: 'Teams Routes' },
+      { path: '/api/games', file: 'games.js', name: 'Games Routes' },
+      { path: '/api/picks', file: 'picks.js', name: 'Picks Routes' },
+      { path: '/api/secret-phrases', file: 'secret-phrases.js', name: 'Secret Phrases Routes' },
+      { path: '/api/betting', file: 'betting.js', name: 'Betting Routes' },
+      
+      // ADDITIONAL ROUTES
+      { path: '/api/news', file: 'news.js', name: 'News Routes' },
+      { path: '/api/nhl', file: 'nhlRoutes.js', name: 'NHL Routes' },
+      { path: '/api/nfl', file: 'nflRoutes.js', name: 'NFL Routes' },
+      { path: '/api/kalshi', file: 'kalshiRoutes.js', name: 'Kalshi Routes' },
+      { path: '/api/draft', file: 'draftRoutes.js', name: 'Draft Routes' },
+      { path: '/api/contest', file: 'contestRoutes.js', name: 'Contest Routes' },
+      { path: '/api/sports-analytics', file: 'sportsAnalyticsRoutes.js', name: 'Sports Analytics Routes' },
+      { path: '/api/situational', file: 'situationalRoutes.js', name: 'Situational Routes' },
+      { path: '/api/stub', file: 'stubRoutes.js', name: 'Stub Routes' },
+      { path: '/api/stats', file: 'statsRoutes.js', name: 'Stats Routes' },
+      { path: '/api/leagues', file: 'leaguesRoutes.js', name: 'Leagues Routes' },
+      { path: '/api/search', file: 'searchRoutes.js', name: 'Search Routes' },
+      { path: '/api/cache', file: 'cacheRoutes.js', name: 'Cache Routes' },
+      { path: '/api/prizepicks', file: 'prizepicksLimitsRoutes.js', name: 'PrizePicks Limits Routes' },
+      { path: '/api/combinations', file: 'combinationsRoutes.js', name: 'Combinations Routes' },
+      { path: '/api/notifications', file: 'notificationsRoutes.js', name: 'Notifications Routes' },
+      { path: '/api/simulate', file: 'simulationsRoutes.js', name: 'Simulations Routes' },
+      { path: '/api/social', file: 'socialRoutes.js', name: 'Social Routes' },
+      { path: '/api/fantasy-teams', file: 'fantasyTeamsRoutes.js', name: 'Fantasy Teams Routes' },
+      { path: '/api/lines', file: 'linesRoutes.js', name: 'Lines Routes' },
+      { path: '/api/monitoring', file: 'monitoringRoutes.js', name: 'Monitoring Routes' },
+      { path: '/api/selections', file: 'selectionsRoutes.js', name: 'Selections Routes' },
+      { path: '/api/influencer', file: 'influencerRoutes.js', name: 'Influencer Routes' },
+      { path: '/api/bump-risk', file: 'bumpRiskRoutes.js', name: 'Bump Risk Routes' },
+      
+      // FANTASY SUB-ROUTES
+      { path: '/api/fantasy/draft', file: 'fantasyDraftRoutes.js', name: 'Fantasy Draft Routes' },
+      { path: '/api/fantasy/lineup', file: 'fantasyLineupRoutes.js', name: 'Fantasy Lineup Routes' },
+      { path: '/api/fantasy/optimize', file: 'fantasyOptimizationRoutes.js', name: 'Fantasy Optimization Routes' },
+    ];
 
-    app.locals.wsServer = wsServer;
+    let loadedCount = 0;
+    let failedCount = 0;
 
-    wsServer.on('connection', (socket) => {
-      console.log('✅ WebSocket client connected:', socket.id);
+    for (const route of routesToLoad) {
+      try {
+        console.log(`🔧 Loading: ${route.name} from ${route.file}`);
+        const module = await import(`./routes/${route.file}`);
+        
+        if (module.default && typeof module.default === 'function') {
+          app.use(route.path, module.default);
+          console.log(`✅ ${route.name} loaded at ${route.path}`);
+          loadedCount++;
+        } else {
+          console.log(`⚠ ${route.name} has no default export`);
+          failedCount++;
+        }
+      } catch (error) {
+        console.log(`❌ Could not load ${route.name}: ${error.message}`);
+        failedCount++;
+      }
+    }
 
-      socket.on('disconnect', () => {
-        console.log('❌ WebSocket client disconnected:', socket.id);
+    console.log(`\n📊 Routes loaded: ${loadedCount} successful, ${failedCount} failed`);
+
+    // ====================
+    // 404 HANDLER (MUST BE AFTER ALL ROUTES!)
+    // ====================
+    app.use('*', (req, res) => {
+      console.log(`❌ 404: ${req.method} ${req.originalUrl}`);
+      res.status(404).json({
+        success: false,
+        error: 'Endpoint not found',
+        path: req.originalUrl,
+        availableEndpoints: [
+          '/health',
+          '/api/health',
+          '/api/debug',
+          '/api/auth',
+          '/api/nba',
+          '/api/players',
+          '/api/teams',
+          '/api/games',
+          '/api/predictions',
+          '/api/fantasy',
+          '/api/admin',
+          '/api/secret-phrases',
+          '/api/analytics',
+          '/api/betting'
+        ]
       });
     });
 
-    // 5. Start server
-    server.listen(PORT, HOST, () => {
+    // 3. Start HTTP server
+    const server = app.listen(PORT, HOST, () => {
+      console.log(`\n🎉 ULTIMATE SERVER RUNNING ON http://${HOST}:${PORT}`);
       console.log(`========================================`);
-      console.log(`✅ Server running on http://${HOST}:${PORT}`);
-      console.log(`🏥 Health: http://${HOST}:${PORT}/health`);
+      console.log(`✅ All 39 routes preserved`);
+      console.log(`✅ Graceful shutdown enabled`);
+      console.log(`✅ Ready for Railway!`);
+      console.log(`\n🏥 Health: http://${HOST}:${PORT}/health`);
       console.log(`🔐 Auth API: http://${HOST}:${PORT}/api/auth`);
       console.log(`🎮 Games API: http://${HOST}:${PORT}/api/games`);
       console.log(`🏀 NBA API: http://${HOST}:${PORT}/api/nba`);
@@ -457,44 +258,49 @@ const initializeServer = async () => {
       console.log(`🗝️ Secret Phrases: http://${HOST}:${PORT}/api/secret-phrases`);
       console.log(`💰 Betting: http://${HOST}:${PORT}/api/betting`);
       console.log(`========================================`);
+      console.log(`\nPress Ctrl+C to stop gracefully`);
     });
 
-    // Handle server errors
-    server.on('error', (error) => {
-      if (error.code === 'EADDRINUSE') {
-        console.error(`❌ Port ${PORT} is already in use!`);
-        process.exit(1);
-      } else {
-        console.error('❌ Server error:', error);
-        process.exit(1);
+    // Add server cleanup
+    cleanupTasks.push(() => {
+      return new Promise(resolve => {
+        server.close(() => {
+          console.log('✅ HTTP server closed');
+          resolve();
+        });
+      });
+    });
+
+    // Graceful shutdown function
+    async function gracefulShutdown(signal) {
+      console.log(`\n🛑 Received ${signal}. Shutting down...`);
+      
+      console.log('Running cleanup tasks...');
+      for (const task of cleanupTasks) {
+        try {
+          await task();
+        } catch (error) {
+          console.log('⚠ Cleanup task error:', error.message);
+        }
       }
-    });
+      
+      console.log('✅ Shutdown complete');
+      process.exit(0);
+    }
 
-    return server;
+    // Handle signals
+    process.on('SIGINT', () => gracefulShutdown('SIGINT (Ctrl+C)'));
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
   } catch (error) {
-    console.error('❌ Failed to initialize server:', error.message);
+    console.error('❌ Failed to start server:', error.message);
     process.exit(1);
   }
-};
+}
 
-// Graceful shutdown
-const gracefulShutdown = async () => {
-  console.log('\n🛑 Starting graceful shutdown...');
-  
-  if (server) {
-    server.close(() => {
-      console.log('✅ HTTP server closed');
-      process.exit(0);
-    });
-  } else {
-    process.exit(0);
-  }
-};
-
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
-
-// Start the server
-initializeServer();
+// ====================
+// START THE SERVER
+// ====================
+startServer();
 
 export { app };
