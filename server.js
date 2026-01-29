@@ -6,6 +6,18 @@ import compression from 'compression';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
 
+// Add this RIGHT AFTER imports at the top of server.js
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ UNHANDLED REJECTION at:', promise, 'reason:', reason);
+  // Don't exit - let the server continue
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ UNCAUGHT EXCEPTION:', error.message);
+  console.error('Stack:', error.stack);
+  // Don't exit - let the server continue
+});
+
 const app = express();
 const PORT = process.env.PORT || 3002;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -228,53 +240,56 @@ console.log('Running on Railway?', isRailway);
     
     // 3. Load all dynamic routes
     console.log('\n🔗 Loading your existing routes...');
-    
-    const routesToLoad = [
-      // CORE ROUTES - LOAD IN ORDER
-      { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
-      { path: '/api/nba', file: 'nbaRoutes.js', name: 'NBA Routes' },
-      { path: '/api/admin', file: 'adminRoutes.js', name: 'Admin Routes' },
-      { path: '/api/analytics', file: 'analytics.js', name: 'Analytics Routes' },
-      { path: '/api/predictions', file: 'predictions.js', name: 'Predictions Routes' },
-      { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
-      { path: '/api/players', file: 'players.js', name: 'Players Routes' },
-      { path: '/api/teams', file: 'teams.js', name: 'Teams Routes' },
-      { path: '/api/games', file: 'games.js', name: 'Games Routes' },
-      { path: '/api/picks', file: 'picks.js', name: 'Picks Routes' },
-      { path: '/api/secret-phrases', file: 'secret-phrases.js', name: 'Secret Phrases Routes' },
-      { path: '/api/betting', file: 'betting.js', name: 'Betting Routes' },
-      
-      // ADDITIONAL ROUTES
-      { path: '/api/news', file: 'news.js', name: 'News Routes' },
-      { path: '/api/nhl', file: 'nhlRoutes.js', name: 'NHL Routes' },
-      { path: '/api/nfl', file: 'nflRoutes.js', name: 'NFL Routes' },
-      { path: '/api/kalshi', file: 'kalshiRoutes.js', name: 'Kalshi Routes' },
-      { path: '/api/draft', file: 'draftRoutes.js', name: 'Draft Routes' },
-      { path: '/api/contest', file: 'contestRoutes.js', name: 'Contest Routes' },
-      { path: '/api/sports-analytics', file: 'sportsAnalyticsRoutes.js', name: 'Sports Analytics Routes' },
-      { path: '/api/situational', file: 'situationalRoutes.js', name: 'Situational Routes' },
-      { path: '/api/stub', file: 'stubRoutes.js', name: 'Stub Routes' },
-      { path: '/api/stats', file: 'statsRoutes.js', name: 'Stats Routes' },
-      { path: '/api/leagues', file: 'leaguesRoutes.js', name: 'Leagues Routes' },
-      { path: '/api/search', file: 'searchRoutes.js', name: 'Search Routes' },
-      { path: '/api/cache', file: 'cacheRoutes.js', name: 'Cache Routes' },
-      { path: '/api/prizepicks', file: 'prizepicksLimitsRoutes.js', name: 'PrizePicks Limits Routes' },
-      { path: '/api/combinations', file: 'combinationsRoutes.js', name: 'Combinations Routes' },
-      { path: '/api/notifications', file: 'notificationsRoutes.js', name: 'Notifications Routes' },
-      { path: '/api/simulate', file: 'simulationsRoutes.js', name: 'Simulations Routes' },
-      { path: '/api/social', file: 'socialRoutes.js', name: 'Social Routes' },
-      { path: '/api/fantasy-teams', file: 'fantasyTeamsRoutes.js', name: 'Fantasy Teams Routes' },
-      { path: '/api/lines', file: 'linesRoutes.js', name: 'Lines Routes' },
-      { path: '/api/monitoring', file: 'monitoringRoutes.js', name: 'Monitoring Routes' },
-      { path: '/api/selections', file: 'selectionsRoutes.js', name: 'Selections Routes' },
-      { path: '/api/influencer', file: 'influencerRoutes.js', name: 'Influencer Routes' },
-      { path: '/api/bump-risk', file: 'bumpRiskRoutes.js', name: 'Bump Risk Routes' },
-      
-      // FANTASY SUB-ROUTES
-      { path: '/api/fantasy/draft', file: 'fantasyDraftRoutes.js', name: 'Fantasy Draft Routes' },
-      { path: '/api/fantasy/lineup', file: 'fantasyLineupRoutes.js', name: 'Fantasy Lineup Routes' },
-      { path: '/api/fantasy/optimize', file: 'fantasyOptimizationRoutes.js', name: 'Fantasy Optimization Routes' },
-    ];
+
+const routesToLoad = [
+  // CORE ROUTES - LOAD IN ORDER
+  { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
+  { path: '/api/nba', file: 'nbaRoutes.js', name: 'NBA Routes' },
+  { path: '/api/admin', file: 'adminRoutes.js', name: 'Admin Routes' },
+  { path: '/api/analytics', file: 'analytics.js', name: 'Analytics Routes' },
+  { path: '/api/predictions', file: 'predictions.js', name: 'Predictions Routes' },
+  { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
+  { path: '/api/players', file: 'players.js', name: 'Players Routes' },
+  
+  // FIXED: Use teamsRoutes.js instead of teams.js
+  { path: '/api/teams', file: 'teamsRoutes.js', name: 'Teams Routes' },
+  
+  { path: '/api/games', file: 'games.js', name: 'Games Routes' },
+  { path: '/api/picks', file: 'picks.js', name: 'Picks Routes' },
+  { path: '/api/secret-phrases', file: 'secret-phrases.js', name: 'Secret Phrases Routes' },
+  { path: '/api/betting', file: 'betting.js', name: 'Betting Routes' },
+  
+  // ADDITIONAL ROUTES
+  { path: '/api/news', file: 'news.js', name: 'News Routes' },
+  { path: '/api/nhl', file: 'nhlRoutes.js', name: 'NHL Routes' },
+  { path: '/api/nfl', file: 'nflRoutes.js', name: 'NFL Routes' },
+  { path: '/api/kalshi', file: 'kalshiRoutes.js', name: 'Kalshi Routes' },
+  { path: '/api/draft', file: 'draftRoutes.js', name: 'Draft Routes' },
+  { path: '/api/contest', file: 'contestRoutes.js', name: 'Contest Routes' },
+  { path: '/api/sports-analytics', file: 'sportsAnalyticsRoutes.js', name: 'Sports Analytics Routes' },
+  { path: '/api/situational', file: 'situationalRoutes.js', name: 'Situational Routes' },
+  { path: '/api/stub', file: 'stubRoutes.js', name: 'Stub Routes' },
+  { path: '/api/stats', file: 'statsRoutes.js', name: 'Stats Routes' },
+  { path: '/api/leagues', file: 'leaguesRoutes.js', name: 'Leagues Routes' },
+  { path: '/api/search', file: 'searchRoutes.js', name: 'Search Routes' },
+  { path: '/api/cache', file: 'cacheRoutes.js', name: 'Cache Routes' },
+  { path: '/api/prizepicks', file: 'prizepicksLimitsRoutes.js', name: 'PrizePicks Limits Routes' },
+  { path: '/api/combinations', file: 'combinationsRoutes.js', name: 'Combinations Routes' },
+  { path: '/api/notifications', file: 'notificationsRoutes.js', name: 'Notifications Routes' },
+  { path: '/api/simulate', file: 'simulationsRoutes.js', name: 'Simulations Routes' },
+  { path: '/api/social', file: 'socialRoutes.js', name: 'Social Routes' },
+  { path: '/api/fantasy-teams', file: 'fantasyTeamsRoutes.js', name: 'Fantasy Teams Routes' },
+  { path: '/api/lines', file: 'linesRoutes.js', name: 'Lines Routes' },
+  { path: '/api/monitoring', file: 'monitoringRoutes.js', name: 'Monitoring Routes' },
+  { path: '/api/selections', file: 'selectionsRoutes.js', name: 'Selections Routes' },
+  { path: '/api/influencer', file: 'influencerRoutes.js', name: 'Influencer Routes' },
+  { path: '/api/bump-risk', file: 'bumpRiskRoutes.js', name: 'Bump Risk Routes' },
+  
+  // FANTASY SUB-ROUTES
+  { path: '/api/fantasy/draft', file: 'fantasyDraftRoutes.js', name: 'Fantasy Draft Routes' },
+  { path: '/api/fantasy/lineup', file: 'fantasyLineupRoutes.js', name: 'Fantasy Lineup Routes' },
+  { path: '/api/fantasy/optimize', file: 'fantasyOptimizationRoutes.js', name: 'Fantasy Optimization Routes' },
+];
 
     let loadedCount = 0;
     let failedCount = 0;
