@@ -8,6 +8,45 @@ import axios from 'axios';
 
 const realDataService = new RealDataService();
 
+// ====================
+// DELAYED SCHEDULER INITIALIZATION
+// ====================
+let schedulerStarted = false;
+
+export function startScheduler() {
+  if (schedulerStarted) return;
+  schedulerStarted = true;
+  
+  console.log('⏳ Delaying scheduler start by 30 seconds...');
+  setTimeout(() => {
+    console.log('🚀 Starting NBA Scheduler...');
+    // Your scheduler code here
+    
+    // Start the sports scheduler if available
+    if (sportsScheduler && typeof sportsScheduler.start === 'function') {
+      sportsScheduler.start();
+    }
+    
+    // Initialize any other scheduler tasks here
+    // e.g., schedule data refreshes, cache updates, etc.
+  }, 30000); // 30 second delay
+}
+
+// Async initialization method for server.js to call
+export async function initialize() {
+  console.log('🏀 NBA Routes initializing...');
+  
+  // Start the scheduler with delay
+  startScheduler();
+  
+  // Add any other async initialization here
+  console.log('✅ NBA Routes initialized (scheduler will start in 30s)');
+}
+
+// ====================
+// ROUTES
+// ====================
+
 // Real NBA games endpoint with caching and fallback (from File 1)
 router.get('/games', cacheMiddleware('5 minutes'), async (req, res) => {
   try {

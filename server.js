@@ -6,6 +6,45 @@ import compression from 'compression';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
 
+// ====================
+// CRITICAL: DISABLE ALL EXTERNAL API CALLS ON STARTUP
+// ====================
+console.log('🚫 DISABLING all external API calls during startup');
+
+// 1. Monkey-patch fetch to block external calls
+const originalFetch = global.fetch;
+
+if (originalFetch) {
+  global.fetch = function(...args) {
+    console.log('🛑 BLOCKED fetch call during startup:', args[0]?.slice?.(0, 100) || args[0]);
+    return Promise.reject(new Error('External API calls disabled during startup'));
+  };
+}
+
+// 2. Disable ALL scheduler tasks for first 3 minutes
+process.env.DISABLE_SCHEDULER = 'true';
+process.env.DISABLE_API_CALLS = 'true';
+
+// 3. Create a startup barrier
+let startupComplete = false;
+const startupBarrier = new Promise((resolve) => {
+  setTimeout(() => {
+    startupComplete = true;
+    console.log('✅ Startup complete - API calls now allowed');
+    // Restore original functions
+    if (originalFetch) global.fetch = originalFetch;
+    process.env.DISABLE_SCHEDULER = 'false';
+    process.env.DISABLE_API_CALLS = 'false';
+    resolve();
+  }, 180000); // 3 MINUTE startup cooldown
+});
+
+// Add memory monitoring
+setInterval(() => {
+  const used = process.memoryUsage();
+  console.log(`🧠 Memory: ${Math.round(used.heapUsed / 1024 / 1024)}MB`);
+}, 30000); // Log every 30 seconds
+
 // Add this RIGHT AFTER imports at the top of server.js
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ UNHANDLED REJECTION at:', promise, 'reason:', reason);
@@ -26,8 +65,25 @@ const HOST = process.env.HOST || '0.0.0.0';
 const cleanupTasks = [];
 
 // ====================
+// STARTUP COOLDOWN FLAG
+// ====================
+let serverReady = false;
+
+// ====================
 // MIDDLEWARE CONFIGURATION
 // ====================
+// Simple middleware to handle requests during startup
+app.use((req, res, next) => {
+  if (!serverReady && req.path !== '/health' && req.path !== '/railway-health') {
+    return res.status(503).json({
+      status: 'starting',
+      message: 'Server is starting up, please wait...',
+      readyIn: '30 seconds'
+    });
+  }
+  next();
+});
+
 // Use Railway environment variables
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
@@ -124,16 +180,22 @@ app.use((req, res, next) => {
 });
 
 // ====================
-// GLOBAL HEALTH ENDPOINTS (ALWAYS AVAILABLE)
+// SIMPLIFIED HEALTH ENDPOINTS (ALWAYS AVAILABLE)
 // ====================
 app.get('/health', (req, res) => {
-  res.json({
+  // Return IMMEDIATELY with minimal processing
+  res.setHeader('Content-Type', 'application/json');
+  res.status(200).end(JSON.stringify({
     status: 'healthy',
-    service: 'NBA Fantasy AI Backend',
-    version: '5.0.0',
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
-  });
+    service: 'NBA Fantasy AI Backend'
+  }));
+});
+
+// Also add a dedicated health check for Railway
+app.get('/railway-health', (req, res) => {
+  // Even simpler - no MongoDB check
+  res.status(200).json({ status: 'ok', timestamp: Date.now() });
 });
 
 app.get('/api/health', (req, res) => {
@@ -158,6 +220,7 @@ app.get('/', (req, res) => {
     version: '5.0.0',
     endpoints: [
       '/health',
+      '/railway-health',
       '/api/health',
       '/api/auth',
       '/api/nba',
@@ -198,15 +261,15 @@ async function startServer() {
   console.log('MONGODB_URI exists:', !!process.env.MONGODB_URI);
   console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
   console.log('========================================');
-// Add to server.js startup
-console.log('🔍 Railway Environment:');
-console.log('PORT:', process.env.PORT);
-console.log('RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT);
-console.log('RAILWAY_PUBLIC_DOMAIN:', process.env.RAILWAY_PUBLIC_DOMAIN);
+  
+  console.log('🔍 Railway Environment:');
+  console.log('PORT:', process.env.PORT);
+  console.log('RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT);
+  console.log('RAILWAY_PUBLIC_DOMAIN:', process.env.RAILWAY_PUBLIC_DOMAIN);
 
-// Test if Railway-specific vars exist
-const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
-console.log('Running on Railway?', isRailway);
+  // Test if Railway-specific vars exist
+  const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
+  console.log('Running on Railway?', isRailway);
 
   try {
     // 1. Connect to MongoDB
@@ -241,55 +304,55 @@ console.log('Running on Railway?', isRailway);
     // 3. Load all dynamic routes
     console.log('\n🔗 Loading your existing routes...');
 
-const routesToLoad = [
-  // CORE ROUTES - LOAD IN ORDER
-  { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
-  { path: '/api/nba', file: 'nbaRoutes.js', name: 'NBA Routes' },
-  { path: '/api/admin', file: 'adminRoutes.js', name: 'Admin Routes' },
-  { path: '/api/analytics', file: 'analytics.js', name: 'Analytics Routes' },
-  { path: '/api/predictions', file: 'predictions.js', name: 'Predictions Routes' },
-  { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
-  { path: '/api/players', file: 'players.js', name: 'Players Routes' },
-  
-  // FIXED: Use teamsRoutes.js instead of teams.js
-  { path: '/api/teams', file: 'teamsRoutes.js', name: 'Teams Routes' },
-  
-  { path: '/api/games', file: 'games.js', name: 'Games Routes' },
-  { path: '/api/picks', file: 'picks.js', name: 'Picks Routes' },
-  { path: '/api/secret-phrases', file: 'secret-phrases.js', name: 'Secret Phrases Routes' },
-  { path: '/api/betting', file: 'betting.js', name: 'Betting Routes' },
-  
-  // ADDITIONAL ROUTES
-  { path: '/api/news', file: 'news.js', name: 'News Routes' },
-  { path: '/api/nhl', file: 'nhlRoutes.js', name: 'NHL Routes' },
-  { path: '/api/nfl', file: 'nflRoutes.js', name: 'NFL Routes' },
-  { path: '/api/kalshi', file: 'kalshiRoutes.js', name: 'Kalshi Routes' },
-  { path: '/api/draft', file: 'draftRoutes.js', name: 'Draft Routes' },
-  { path: '/api/contest', file: 'contestRoutes.js', name: 'Contest Routes' },
-  { path: '/api/sports-analytics', file: 'sportsAnalyticsRoutes.js', name: 'Sports Analytics Routes' },
-  { path: '/api/situational', file: 'situationalRoutes.js', name: 'Situational Routes' },
-  { path: '/api/stub', file: 'stubRoutes.js', name: 'Stub Routes' },
-  { path: '/api/stats', file: 'statsRoutes.js', name: 'Stats Routes' },
-  { path: '/api/leagues', file: 'leaguesRoutes.js', name: 'Leagues Routes' },
-  { path: '/api/search', file: 'searchRoutes.js', name: 'Search Routes' },
-  { path: '/api/cache', file: 'cacheRoutes.js', name: 'Cache Routes' },
-  { path: '/api/prizepicks', file: 'prizepicksLimitsRoutes.js', name: 'PrizePicks Limits Routes' },
-  { path: '/api/combinations', file: 'combinationsRoutes.js', name: 'Combinations Routes' },
-  { path: '/api/notifications', file: 'notificationsRoutes.js', name: 'Notifications Routes' },
-  { path: '/api/simulate', file: 'simulationsRoutes.js', name: 'Simulations Routes' },
-  { path: '/api/social', file: 'socialRoutes.js', name: 'Social Routes' },
-  { path: '/api/fantasy-teams', file: 'fantasyTeamsRoutes.js', name: 'Fantasy Teams Routes' },
-  { path: '/api/lines', file: 'linesRoutes.js', name: 'Lines Routes' },
-  { path: '/api/monitoring', file: 'monitoringRoutes.js', name: 'Monitoring Routes' },
-  { path: '/api/selections', file: 'selectionsRoutes.js', name: 'Selections Routes' },
-  { path: '/api/influencer', file: 'influencerRoutes.js', name: 'Influencer Routes' },
-  { path: '/api/bump-risk', file: 'bumpRiskRoutes.js', name: 'Bump Risk Routes' },
-  
-  // FANTASY SUB-ROUTES
-  { path: '/api/fantasy/draft', file: 'fantasyDraftRoutes.js', name: 'Fantasy Draft Routes' },
-  { path: '/api/fantasy/lineup', file: 'fantasyLineupRoutes.js', name: 'Fantasy Lineup Routes' },
-  { path: '/api/fantasy/optimize', file: 'fantasyOptimizationRoutes.js', name: 'Fantasy Optimization Routes' },
-];
+    const routesToLoad = [
+      // CORE ROUTES - LOAD IN ORDER
+      { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
+      { path: '/api/nba', file: 'nbaRoutes.js', name: 'NBA Routes' },
+      { path: '/api/admin', file: 'adminRoutes.js', name: 'Admin Routes' },
+      { path: '/api/analytics', file: 'analytics.js', name: 'Analytics Routes' },
+      { path: '/api/predictions', file: 'predictions.js', name: 'Predictions Routes' },
+      { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
+      { path: '/api/players', file: 'players.js', name: 'Players Routes' },
+      
+      // FIXED: Use teamsRoutes.js instead of teams.js
+      { path: '/api/teams', file: 'teamsRoutes.js', name: 'Teams Routes' },
+      
+      { path: '/api/games', file: 'games.js', name: 'Games Routes' },
+      { path: '/api/picks', file: 'picks.js', name: 'Picks Routes' },
+      { path: '/api/secret-phrases', file: 'secret-phrases.js', name: 'Secret Phrases Routes' },
+      { path: '/api/betting', file: 'betting.js', name: 'Betting Routes' },
+      
+      // ADDITIONAL ROUTES
+      { path: '/api/news', file: 'news.js', name: 'News Routes' },
+      { path: '/api/nhl', file: 'nhlRoutes.js', name: 'NHL Routes' },
+      { path: '/api/nfl', file: 'nflRoutes.js', name: 'NFL Routes' },
+      { path: '/api/kalshi', file: 'kalshiRoutes.js', name: 'Kalshi Routes' },
+      { path: '/api/draft', file: 'draftRoutes.js', name: 'Draft Routes' },
+      { path: '/api/contest', file: 'contestRoutes.js', name: 'Contest Routes' },
+      { path: '/api/sports-analytics', file: 'sportsAnalyticsRoutes.js', name: 'Sports Analytics Routes' },
+      { path: '/api/situational', file: 'situationalRoutes.js', name: 'Situational Routes' },
+      { path: '/api/stub', file: 'stubRoutes.js', name: 'Stub Routes' },
+      { path: '/api/stats', file: 'statsRoutes.js', name: 'Stats Routes' },
+      { path: '/api/leagues', file: 'leaguesRoutes.js', name: 'Leagues Routes' },
+      { path: '/api/search', file: 'searchRoutes.js', name: 'Search Routes' },
+      { path: '/api/cache', file: 'cacheRoutes.js', name: 'Cache Routes' },
+      { path: '/api/prizepicks', file: 'prizepicksLimitsRoutes.js', name: 'PrizePicks Limits Routes' },
+      { path: '/api/combinations', file: 'combinationsRoutes.js', name: 'Combinations Routes' },
+      { path: '/api/notifications', file: 'notificationsRoutes.js', name: 'Notifications Routes' },
+      { path: '/api/simulate', file: 'simulationsRoutes.js', name: 'Simulations Routes' },
+      { path: '/api/social', file: 'socialRoutes.js', name: 'Social Routes' },
+      { path: '/api/fantasy-teams', file: 'fantasyTeamsRoutes.js', name: 'Fantasy Teams Routes' },
+      { path: '/api/lines', file: 'linesRoutes.js', name: 'Lines Routes' },
+      { path: '/api/monitoring', file: 'monitoringRoutes.js', name: 'Monitoring Routes' },
+      { path: '/api/selections', file: 'selectionsRoutes.js', name: 'Selections Routes' },
+      { path: '/api/influencer', file: 'influencerRoutes.js', name: 'Influencer Routes' },
+      { path: '/api/bump-risk', file: 'bumpRiskRoutes.js', name: 'Bump Risk Routes' },
+      
+      // FANTASY SUB-ROUTES
+      { path: '/api/fantasy/draft', file: 'fantasyDraftRoutes.js', name: 'Fantasy Draft Routes' },
+      { path: '/api/fantasy/lineup', file: 'fantasyLineupRoutes.js', name: 'Fantasy Lineup Routes' },
+      { path: '/api/fantasy/optimize', file: 'fantasyOptimizationRoutes.js', name: 'Fantasy Optimization Routes' },
+    ];
 
     let loadedCount = 0;
     let failedCount = 0;
@@ -355,6 +418,7 @@ const routesToLoad = [
         path: req.originalUrl,
         availableEndpoints: [
           '/health',
+          '/railway-health',
           '/api/health',
           '/api/debug',
           '/api/auth',
@@ -375,11 +439,20 @@ const routesToLoad = [
     // 4. Start HTTP server
     const server = app.listen(PORT, HOST, () => {
       console.log(`\n🎉 ULTIMATE SERVER RUNNING ON http://${HOST}:${PORT}`);
+      
+      // Delay all scheduler tasks by 60 seconds
+      console.log('⏳ Delaying all scheduler tasks by 60 seconds...');
+      setTimeout(() => {
+        console.log('🚀 Starting scheduler tasks now...');
+        // This gives your server time to stabilize
+      }, 60000);
+      
       console.log(`========================================`);
       console.log(`✅ All 38 routes loaded`);
       console.log(`✅ Graceful shutdown enabled`);
       console.log(`✅ Ready for Railway!`);
       console.log(`\n🏥 Health: http://${HOST}:${PORT}/health`);
+      console.log(`🏥 Railway Health: http://${HOST}:${PORT}/railway-health`);
       console.log(`🔐 Auth API: http://${HOST}:${PORT}/api/auth`);
       console.log(`🎮 Games API: http://${HOST}:${PORT}/api/games`);
       console.log(`🏀 NBA API: http://${HOST}:${PORT}/api/nba`);
@@ -391,6 +464,12 @@ const routesToLoad = [
       console.log(`========================================`);
       console.log(`\nPress Ctrl+C to stop gracefully`);
     });
+
+    // Mark server as ready after 30 seconds
+    setTimeout(() => {
+      serverReady = true;
+      console.log('✅ Server marked as ready for all requests');
+    }, 30000);
 
     // Add server cleanup
     cleanupTasks.push(() => {

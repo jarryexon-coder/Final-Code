@@ -6,8 +6,10 @@
   },
   "deploy": {
     "startCommand": "node server.js",
-    "healthcheckPath": "/health",
+    "healthcheckPath": "/railway-health",
     "healthcheckTimeout": 10,
-    "restartPolicyType": "ON_FAILURE"
+    "healthcheckInterval": 5,
+    "restartPolicyType": "ALWAYS",
+    "restartPolicyMaxRetries": 10
   }
 }

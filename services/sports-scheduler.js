@@ -1,4 +1,4 @@
-// services/sports-scheduler.js - FIXED VERSION
+// services/sports-scheduler.js - FIXED VERSION WITH STARTUP DELAY
 import https from 'https';
 import cron from 'node-cron';
 import NodeCache from 'node-cache';
@@ -6,6 +6,12 @@ import dotenv from 'dotenv';
 import express from 'express';
 
 dotenv.config();
+
+// At the BEGINNING of scheduler initialization
+if (process.env.DISABLE_SCHEDULER === 'true') {
+  console.log('⏸️  Scheduler disabled for startup - delaying for 3 minutes');
+  // We'll handle this in the constructor instead of returning here
+}
 
 // Initialize cache
 const apiCache = new NodeCache({ stdTTL: 3600 });
@@ -66,9 +72,22 @@ class SportsApiScheduler {
     this.balldontlieInterval = null;
     this.balldontlieResetInterval = null;
     this.activeIntervals = new Set();
+    this.isDelayed = process.env.DISABLE_SCHEDULER === 'true';
+    
     this.validateEnvironmentVariables();
-    this.setupSchedulers();
-    this.logSchedules();
+    
+    // Wrap ALL scheduler tasks with startup delay
+    if (this.isDelayed) {
+      console.log('⏸️  Delaying scheduler start by 3 minutes...');
+      setTimeout(() => {
+        console.log('🚀 Starting scheduler now');
+        this.setupSchedulers();
+        this.logSchedules();
+      }, 180000);
+    } else {
+      this.setupSchedulers();
+      this.logSchedules();
+    }
   }
 
   validateEnvironmentVariables() {
@@ -87,6 +106,10 @@ class SportsApiScheduler {
     }
 
     console.log('✅ All required environment variables are set');
+    
+    if (this.isDelayed) {
+      console.log('⏸️  Scheduler will start in 3 minutes');
+    }
   }
 
   makeAPIRequest(config, endpoint = '') {
@@ -258,6 +281,7 @@ class SportsApiScheduler {
     
     return {
       currentTimeET: etTime,
+      schedulerStatus: this.isDelayed ? 'Delayed startup (3 minutes)' : 'Running normally',
       balldontlie: {
         requestsThisMinute: this.balldontlieRequests,
         rateLimit: API_CONFIG.balldontlie.rateLimit,
@@ -347,13 +371,32 @@ function createSportsRoutes(scheduler) {
   return router;
 }
 
-// Initialize everything
-const sportsScheduler = new SportsApiScheduler();
+// Initialize everything with conditional delay
+const startScheduler = () => {
+  if (process.env.DISABLE_SCHEDULER === 'true') {
+    console.log('⏸️  Delaying scheduler initialization by 3 minutes...');
+    setTimeout(() => {
+      console.log('🚀 Starting scheduler now');
+      const sportsScheduler = new SportsApiScheduler();
+      return sportsScheduler;
+    }, 180000);
+    return null;
+  }
+  
+  // Normal scheduler start
+  console.log('🚀 Starting scheduler immediately');
+  const sportsScheduler = new SportsApiScheduler();
+  return sportsScheduler;
+};
+
+const sportsScheduler = startScheduler();
 
 // Add graceful shutdown handler
 process.on('SIGINT', () => {
   console.log('\n🛑 Received SIGINT (Ctrl+C). Cleaning up scheduler...');
-  sportsScheduler.cleanup();
+  if (sportsScheduler) {
+    sportsScheduler.cleanup();
+  }
   setTimeout(() => {
     console.log('✅ Graceful shutdown complete');
     process.exit(0);
@@ -362,7 +405,9 @@ process.on('SIGINT', () => {
 
 process.on('SIGTERM', () => {
   console.log('\n🛑 Received SIGTERM. Cleaning up scheduler...');
-  sportsScheduler.cleanup();
+  if (sportsScheduler) {
+    sportsScheduler.cleanup();
+  }
   setTimeout(() => {
     console.log('✅ Graceful shutdown complete');
     process.exit(0);
