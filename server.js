@@ -1,4 +1,3 @@
-jerryexon@3 nba-backend % cat server.js
 // EMERGENCY FIX: IMMEDIATE HEALTH CHECK RESPONSE
 // ====================
 // CRITICAL: DISABLE ALL EXTERNAL API CALLS ON STARTUP
