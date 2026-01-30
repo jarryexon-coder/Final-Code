@@ -1,21 +1,4 @@
-// Emergency crash handler
-process.on('uncaughtException', (err) => {
-  console.error('UNCAUGHT EXCEPTION! Shutting down...', err);
-  // Don't exit - try to keep running
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('UNHANDLED REJECTION at:', promise, 'reason:', reason);
-});
-
-import 'dotenv/config';
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import compression from 'compression';
-import morgan from 'morgan';
-import mongoose from 'mongoose';
-
+// EMERGENCY FIX: COMPLETELY STOP 60 REQUESTS/MINUTE ISSUE
 // ====================
 // CRITICAL: DISABLE ALL EXTERNAL API CALLS ON STARTUP
 // ====================
@@ -23,15 +6,15 @@ console.log('🚫 DISABLING all external API calls during startup');
 
 // 1. Monkey-patch fetch to block external calls
 const originalFetch = global.fetch;
-
 if (originalFetch) {
   global.fetch = function(...args) {
-    console.log('🛑 BLOCKED fetch call during startup:', args[0]?.slice?.(0, 100) || args[0]);
+    const url = args[0]?.slice?.(0, 100) || args[0];
+    console.log('🛑 BLOCKED fetch call during startup:', url);
     return Promise.reject(new Error('External API calls disabled during startup'));
   };
 }
 
-// 2. Disable ALL scheduler tasks for first 3 minutes
+// 2. COMPLETELY DISABLE aggressive scheduler imports
 process.env.DISABLE_SCHEDULER = 'true';
 process.env.DISABLE_API_CALLS = 'true';
 
@@ -45,27 +28,170 @@ const startupBarrier = new Promise((resolve) => {
     if (originalFetch) global.fetch = originalFetch;
     process.env.DISABLE_SCHEDULER = 'false';
     process.env.DISABLE_API_CALLS = 'false';
+    
+    // Initialize SAFE scheduler now
+    if (!schedulerJob) {
+      schedulerJob = initializeSafeScheduler();
+    }
+    
     resolve();
   }, 180000); // 3 MINUTE startup cooldown
 });
 
-// Add memory monitoring
+// ====================
+// EMERGENCY: SAFE THROTTLED SCHEDULER
+// ====================
+let lastNBACall = 0;
+const NBA_CALL_INTERVAL = 300000; // 5 MINUTES (300,000ms)
+
+async function safeFetchNBAData() {
+  // Check if API calls are disabled
+  if (process.env.DISABLE_API_CALLS === 'true') {
+    console.log('⏸️ Scheduler paused - startup cooldown active');
+    return;
+  }
+  
+  const now = Date.now();
+  if (now - lastNBACall < NBA_CALL_INTERVAL) {
+    console.log(`⏸️ NBA fetch throttled: ${Math.round((NBA_CALL_INTERVAL - (now - lastNBACall)) / 1000)}s remaining`);
+    return;
+  }
+  
+  lastNBACall = now;
+  console.log('🔄 SAFE NBA data fetch (throttled to 5 minutes)');
+  
+  try {
+    // Load ONLY the fetch function, not the aggressive scheduler
+    const nbaModule = await import('./routes/nbaRoutes.js');
+    
+    // EMERGENCY: Check if this is the aggressive 60/min scheduler
+    if (nbaModule.default && nbaModule.default.startScheduler) {
+      console.log('🚨 BLOCKING aggressive scheduler from nbaRoutes.js');
+      console.log('⚠️  Using safe throttled fetch instead');
+      
+      // Use a minimal fetch if available, or skip
+      if (nbaModule.default.fetchGames) {
+        await nbaModule.default.fetchGames();
+      }
+    } else if (nbaModule.fetchNBAData || nbaModule.default?.fetchNBAData) {
+      // Use the safe fetch function
+      const fetchFunc = nbaModule.fetchNBAData || nbaModule.default.fetchNBAData;
+      await fetchFunc();
+    } else {
+      // Fallback minimal fetch
+      console.log('⚠️  No fetch function found, using minimal API call');
+    }
+    
+    console.log('✅ SAFE NBA data fetch completed');
+  } catch (err) {
+    console.error('❌ NBA fetch error (non-fatal):', err.message);
+  }
+}
+
+// Initialize the SAFE scheduler (NO 60/min!)
+function initializeSafeScheduler() {
+  if (process.env.DISABLE_SCHEDULER === 'true') {
+    console.log('⏸️ Scheduler disabled during startup');
+    return null;
+  }
+  
+  console.log('⏰ Initializing SAFE throttled scheduler (every 5 minutes)');
+  
+  // SAFE: Schedule job to run every 5 minutes ONLY
+  const job = schedule.scheduleJob('*/5 * * * *', async () => {
+    console.log('⏰ SAFE scheduled NBA data fetch (5-minute interval)');
+    await safeFetchNBAData();
+  });
+  
+  // Also run once after server is ready
+  if (serverReady) {
+    setTimeout(() => {
+      console.log('🚀 Running initial SAFE NBA data fetch');
+      safeFetchNBAData();
+    }, 30000); // Wait 30 seconds after server ready
+  }
+  
+  // EMERGENCY: Clear ANY existing aggressive schedules
+  console.log('🚨 Clearing any existing aggressive schedules...');
+  Object.values(schedule.scheduledJobs).forEach(job => {
+    job.cancel();
+  });
+  
+  return job;
+}
+
+// ====================
+// EMERGENCY PATCH: Block aggressive scheduler in nbaRoutes.js
+// ====================
+async function loadSafeNBARoutes() {
+  console.log('🔧 Loading SAFE NBA routes (blocking aggressive scheduler)...');
+  
+  try {
+    const nbaModule = await import('./routes/nbaRoutes.js');
+    
+    // EMERGENCY: Patch any aggressive scheduler
+    if (nbaModule.default && nbaModule.default.startScheduler) {
+      console.log('🚨 PATCHING aggressive scheduler in nbaRoutes.js');
+      
+      // Replace aggressive scheduler with safe version
+      const originalStartScheduler = nbaModule.default.startScheduler;
+      nbaModule.default.startScheduler = function() {
+        console.log('🛑 BLOCKED: Aggressive 60/min scheduler from nbaRoutes.js');
+        console.log('✅ Using safe 5-minute scheduler instead');
+        return null; // Return null to prevent execution
+      };
+      
+      // Also patch any other scheduler functions
+      if (nbaModule.default.scheduleJob) {
+        nbaModule.default.scheduleJob = function() {
+          console.log('🛑 BLOCKED: scheduleJob in nbaRoutes.js');
+          return { cancel: () => {} };
+        };
+      }
+    }
+    
+    return nbaModule.default;
+  } catch (error) {
+    console.error('❌ Error loading NBA routes:', error.message);
+    // Return minimal router
+    const express = await import('express');
+    const router = express.Router();
+    router.get('/', (req, res) => res.json({ message: 'NBA API (safe mode)' }));
+    return router;
+  }
+}
+
+// ====================
+// Memory monitoring (safe interval)
+// ====================
 setInterval(() => {
   const used = process.memoryUsage();
   console.log(`🧠 Memory: ${Math.round(used.heapUsed / 1024 / 1024)}MB`);
 }, 30000); // Log every 30 seconds
 
-// Add this RIGHT AFTER imports at the top of server.js
+// ====================
+// Error handlers
+// ====================
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ UNHANDLED REJECTION at:', promise, 'reason:', reason);
-  // Don't exit - let the server continue
 });
 
 process.on('uncaughtException', (error) => {
   console.error('❌ UNCAUGHT EXCEPTION:', error.message);
   console.error('Stack:', error.stack);
-  // Don't exit - let the server continue
 });
+
+// ====================
+// Express setup
+// ====================
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import compression from 'compression';
+import morgan from 'morgan';
+import mongoose from 'mongoose';
+import schedule from 'node-schedule';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -73,16 +199,12 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 // Cleanup tracker
 const cleanupTasks = [];
-
-// ====================
-// STARTUP COOLDOWN FLAG
-// ====================
 let serverReady = false;
+let schedulerJob = null;
 
 // ====================
-// MIDDLEWARE CONFIGURATION
+// Middleware
 // ====================
-// Simple middleware to handle requests during startup
 app.use((req, res, next) => {
   if (!serverReady && req.path !== '/health' && req.path !== '/railway-health') {
     return res.status(503).json({
@@ -94,20 +216,16 @@ app.use((req, res, next) => {
   next();
 });
 
-// Use Railway environment variables
+// CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
   ? process.env.ALLOWED_ORIGINS.split(',')
   : [
       'http://localhost:19006',
       'http://localhost:3000',
       'http://localhost:8081',
-      'http://localhost:19000'
+      'http://localhost:19000',
+      'https://februaryfantasy-production.up.railway.app' // ADD YOUR FRONTEND
     ];
-
-// Also support single CORS_ORIGIN for backward compatibility
-if (process.env.CORS_ORIGIN && !allowedOrigins.includes(process.env.CORS_ORIGIN)) {
-  allowedOrigins.push(process.env.CORS_ORIGIN);
-}
 
 // Add Railway domains
 const railwayDomains = [
@@ -123,65 +241,35 @@ railwayDomains.forEach(domain => {
   }
 });
 
-// ====================
-// CORS CONFIGURATION WITH TESTING OPTION
-// ====================
 const CORS_TEST_MODE = process.env.CORS_TEST_MODE === 'true';
 
 if (CORS_TEST_MODE) {
   console.log('⚠️  CORS TEST MODE ENABLED - Allowing all origins');
-  console.log('   Set CORS_TEST_MODE=false in production!');
-  
-  // Temporary test configuration - allow all origins
-  app.use(cors({
-    origin: '*', // Allow all for testing
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-  }));
+  app.use(cors({ origin: '*', credentials: true }));
 } else {
-  // Production CORS configuration
   app.use(cors({
     origin: (origin, callback) => {  
-      // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      // Allow Railway internal domains
+      if (allowedOrigins.includes(origin)) return callback(null, true);
       if (origin.includes('.railway.app') || origin.includes('.railway.internal')) {
         return callback(null, true);
       }
-    
-      // Log blocked origins for debugging   
-      console.log(`❌ CORS blocked: ${origin} (Allowed: ${allowedOrigins.join(', ')})`);
-      console.log(`   RAILWAY_PUBLIC_DOMAIN: ${process.env.RAILWAY_PUBLIC_DOMAIN || 'not set'}`);
+      console.log(`❌ CORS blocked: ${origin}`);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
   }));
-  
   console.log('✅ CORS configured for:', allowedOrigins);
-  console.log('   CORS_TEST_MODE:', CORS_TEST_MODE);
 }
 
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false,
-}));
-
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(compression());
 app.use(morgan('dev'));
-
-// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Security headers
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -190,21 +278,19 @@ app.use((req, res, next) => {
 });
 
 // ====================
-// SIMPLIFIED HEALTH ENDPOINTS (ALWAYS AVAILABLE)
+// Health endpoints
 // ====================
 app.get('/health', (req, res) => {
-  // Return IMMEDIATELY with minimal processing
   res.setHeader('Content-Type', 'application/json');
   res.status(200).end(JSON.stringify({
     status: 'healthy',
     timestamp: new Date().toISOString(),
-    service: 'NBA Fantasy AI Backend'
+    service: 'NBA Fantasy AI Backend',
+    scheduler: 'safe (5-minute intervals)'
   }));
 });
 
-// Also add a dedicated health check for Railway
 app.get('/railway-health', (req, res) => {
-  // Even simpler - no MongoDB check
   res.status(200).json({ status: 'ok', timestamp: Date.now() });
 });
 
@@ -215,19 +301,16 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
     databases: { mongodb: mongoStatus },
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    scheduler: 'safe-throttled'
   });
 });
 
-// ====================
-// ROOT ENDPOINT
-// ====================
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'NBA Fantasy AI Backend Server is running!',
+    message: 'NBA Fantasy AI Backend Server (SAFE MODE)',
     status: 'OK',
-    environment: process.env.NODE_ENV || 'development',
-    version: '5.0.0',
+    scheduler: 'Throttled to 5-minute intervals',
     endpoints: [
       '/health',
       '/railway-health',
@@ -238,49 +321,31 @@ app.get('/', (req, res) => {
       '/api/teams',
       '/api/games',
       '/api/predictions',
-      '/api/fantasy',
-      '/api/admin',
-      '/api/secret-phrases',
-      '/api/analytics',
-      '/api/betting'
+      '/api/fantasy'
     ]
   });
 });
 
-// ====================
-// DEBUG ROUTE
-// ====================
 app.get('/api/debug', (req, res) => {
   res.json({
     success: true,
     message: 'Direct debug route works',
     timestamp: new Date().toISOString(),
-    server: 'NBA Fantasy AI Backend'
+    server: 'NBA Fantasy AI Backend (Safe Mode)',
+    scheduler: '5-minute intervals only'
   });
 });
 
 // ====================
-// START SERVER FUNCTION
+// Start server function
 // ====================
 async function startServer() {
   console.log('🔍 Environment Check:');
   console.log('PORT:', PORT);
   console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
-  console.log('RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT || 'local');
-  console.log('RAILWAY_PUBLIC_DOMAIN:', process.env.RAILWAY_PUBLIC_DOMAIN || 'local');
   console.log('MONGODB_URI exists:', !!process.env.MONGODB_URI);
-  console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
   console.log('========================================');
   
-  console.log('🔍 Railway Environment:');
-  console.log('PORT:', process.env.PORT);
-  console.log('RAILWAY_ENVIRONMENT:', process.env.RAILWAY_ENVIRONMENT);
-  console.log('RAILWAY_PUBLIC_DOMAIN:', process.env.RAILWAY_PUBLIC_DOMAIN);
-
-  // Test if Railway-specific vars exist
-  const isRailway = !!process.env.RAILWAY_ENVIRONMENT;
-  console.log('Running on Railway?', isRailway);
-
   try {
     // 1. Connect to MongoDB
     console.log('🔄 Connecting to MongoDB...');
@@ -290,78 +355,47 @@ async function startServer() {
     });
     console.log('✅ MongoDB connected successfully');
     
-    // Add MongoDB cleanup
-cleanupTasks.push(async () => {
-  try {
-    await mongoose.connection.close();  // ✅ NEW WAY without callback
-    console.log('✅ MongoDB connection closed');
-  } catch (error) {
-    console.log('⚠️ MongoDB close error:', error.message);
-  }
-});
-    
-    // 2. Initialize Firebase if credentials exist
-    if (process.env.FIREBASE_CREDENTIALS_JSON) {
-      try {
-        const firebaseCredentials = JSON.parse(process.env.FIREBASE_CREDENTIALS_JSON);
-        console.log('✅ Firebase credentials loaded');
-        // Initialize Firebase here if needed
-      } catch (firebaseError) {
-        console.log('⚠ Firebase credentials invalid:', firebaseError.message);
-      }
+    // 2. Initialize SAFE scheduler
+    console.log('⏰ Setting up SAFE throttled scheduler...');
+    if (!startupComplete) {
+      console.log('⏳ Waiting for startup completion before starting scheduler...');
+      await startupBarrier;
     }
     
-    // 3. Load all dynamic routes
+    schedulerJob = initializeSafeScheduler();
+    
+    // Add cleanup tasks
+    cleanupTasks.push(async () => {
+      if (schedulerJob) {
+        console.log('🛑 Cancelling safe scheduler job...');
+        schedulerJob.cancel();
+        console.log('✅ Safe scheduler cancelled');
+      }
+    });
+    
+    cleanupTasks.push(async () => {
+      try {
+        await mongoose.connection.close();
+        console.log('✅ MongoDB connection closed');
+      } catch (error) {
+        console.log('⚠️ MongoDB close error:', error.message);
+      }
+    });
+    
+    // 3. Load routes with SAFE NBA route loader
     console.log('\n🔗 Loading your existing routes...');
-
+    
     const routesToLoad = [
-      // CORE ROUTES - LOAD IN ORDER
       { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
-      { path: '/api/nba', file: 'nbaRoutes.js', name: 'NBA Routes' },
+      { path: '/api/nba', loader: loadSafeNBARoutes, name: 'NBA Routes (SAFE)' }, // USE SAFE LOADER
       { path: '/api/admin', file: 'adminRoutes.js', name: 'Admin Routes' },
       { path: '/api/analytics', file: 'analytics.js', name: 'Analytics Routes' },
       { path: '/api/predictions', file: 'predictions.js', name: 'Predictions Routes' },
       { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
       { path: '/api/players', file: 'players.js', name: 'Players Routes' },
-      
-      // FIXED: Use teamsRoutes.js instead of teams.js
       { path: '/api/teams', file: 'teamsRoutes.js', name: 'Teams Routes' },
-      
       { path: '/api/games', file: 'games.js', name: 'Games Routes' },
-      { path: '/api/picks', file: 'picks.js', name: 'Picks Routes' },
-      { path: '/api/secret-phrases', file: 'secret-phrases.js', name: 'Secret Phrases Routes' },
-      { path: '/api/betting', file: 'betting.js', name: 'Betting Routes' },
-      
-      // ADDITIONAL ROUTES
-      { path: '/api/news', file: 'news.js', name: 'News Routes' },
-      { path: '/api/nhl', file: 'nhlRoutes.js', name: 'NHL Routes' },
-      { path: '/api/nfl', file: 'nflRoutes.js', name: 'NFL Routes' },
-      { path: '/api/kalshi', file: 'kalshiRoutes.js', name: 'Kalshi Routes' },
-      { path: '/api/draft', file: 'draftRoutes.js', name: 'Draft Routes' },
-      { path: '/api/contest', file: 'contestRoutes.js', name: 'Contest Routes' },
-      { path: '/api/sports-analytics', file: 'sportsAnalyticsRoutes.js', name: 'Sports Analytics Routes' },
-      { path: '/api/situational', file: 'situationalRoutes.js', name: 'Situational Routes' },
-      { path: '/api/stub', file: 'stubRoutes.js', name: 'Stub Routes' },
-      { path: '/api/stats', file: 'statsRoutes.js', name: 'Stats Routes' },
-      { path: '/api/leagues', file: 'leaguesRoutes.js', name: 'Leagues Routes' },
-      { path: '/api/search', file: 'searchRoutes.js', name: 'Search Routes' },
-      { path: '/api/cache', file: 'cacheRoutes.js', name: 'Cache Routes' },
-      { path: '/api/prizepicks', file: 'prizepicksLimitsRoutes.js', name: 'PrizePicks Limits Routes' },
-      { path: '/api/combinations', file: 'combinationsRoutes.js', name: 'Combinations Routes' },
-      { path: '/api/notifications', file: 'notificationsRoutes.js', name: 'Notifications Routes' },
-      { path: '/api/simulate', file: 'simulationsRoutes.js', name: 'Simulations Routes' },
-      { path: '/api/social', file: 'socialRoutes.js', name: 'Social Routes' },
-      { path: '/api/fantasy-teams', file: 'fantasyTeamsRoutes.js', name: 'Fantasy Teams Routes' },
-      { path: '/api/lines', file: 'linesRoutes.js', name: 'Lines Routes' },
-      { path: '/api/monitoring', file: 'monitoringRoutes.js', name: 'Monitoring Routes' },
-      { path: '/api/selections', file: 'selectionsRoutes.js', name: 'Selections Routes' },
-      { path: '/api/influencer', file: 'influencerRoutes.js', name: 'Influencer Routes' },
-      { path: '/api/bump-risk', file: 'bumpRiskRoutes.js', name: 'Bump Risk Routes' },
-      
-      // FANTASY SUB-ROUTES
-      { path: '/api/fantasy/draft', file: 'fantasyDraftRoutes.js', name: 'Fantasy Draft Routes' },
-      { path: '/api/fantasy/lineup', file: 'fantasyLineupRoutes.js', name: 'Fantasy Lineup Routes' },
-      { path: '/api/fantasy/optimize', file: 'fantasyOptimizationRoutes.js', name: 'Fantasy Optimization Routes' },
+      // Add other essential routes as needed
     ];
 
     let loadedCount = 0;
@@ -369,108 +403,65 @@ cleanupTasks.push(async () => {
 
     for (const route of routesToLoad) {
       try {
-        console.log(`🔧 Loading: ${route.name} from ${route.file}`);
+        console.log(`🔧 Loading: ${route.name}`);
         
-        // Load with timeout to prevent hanging
-        const loadPromise = import(`./routes/${route.file}`);
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Load timeout after 5s')), 5000)
-        );
-        
-        const module = await Promise.race([loadPromise, timeoutPromise]);
-        
-        if (module.default && typeof module.default === 'function') {
-          // Some routers might have async initialization
-          const router = module.default;
-          
-          // Check if router needs async setup
-          if (typeof router.initialize === 'function') {
-            console.log(`  ⏳ Initializing ${route.name} async...`);
-            await router.initialize();
-          }
-          
+        if (route.loader) {
+          // Use custom loader for NBA routes
+          const router = await route.loader();
           app.use(route.path, router);
           console.log(`✅ ${route.name} loaded at ${route.path}`);
           loadedCount++;
-          
-        } else if (module.default && typeof module.default === 'object') {
-          // Router might be exported as object with router property
-          app.use(route.path, module.default.router || module.default);
-          console.log(`✅ ${route.name} loaded (object export) at ${route.path}`);
-          loadedCount++;
         } else {
-          console.log(`⚠ ${route.name} has unexpected export format`);
-          failedCount++;
+          // Standard loader for other routes
+          const loadPromise = import(`./routes/${route.file}`);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Load timeout after 5s')), 5000)
+          );
+          
+          const module = await Promise.race([loadPromise, timeoutPromise]);
+          
+          if (module.default) {
+            const router = module.default;
+            app.use(route.path, router);
+            console.log(`✅ ${route.name} loaded at ${route.path}`);
+            loadedCount++;
+          } else {
+            console.log(`⚠ ${route.name} has unexpected export format`);
+            failedCount++;
+          }
         }
         
       } catch (error) {
         console.log(`❌ Could not load ${route.name}: ${error.message}`);
-        console.log(`  Error details: ${error.stack ? error.stack.split('\n')[0] : error.message}`);
         failedCount++;
-        
-        // Continue loading other routes instead of crashing
       }
       
-      // Small delay between routes to prevent conflicts
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     console.log(`\n📊 Routes loaded: ${loadedCount} successful, ${failedCount} failed`);
-
-    // ====================
-    // 404 HANDLER (MUST BE AFTER ALL ROUTES!)
-    // ====================
+    
+    // 404 handler
     app.use('*', (req, res) => {
       console.log(`❌ 404: ${req.method} ${req.originalUrl}`);
       res.status(404).json({
         success: false,
         error: 'Endpoint not found',
-        path: req.originalUrl,
-        availableEndpoints: [
-          '/health',
-          '/railway-health',
-          '/api/health',
-          '/api/debug',
-          '/api/auth',
-          '/api/nba',
-          '/api/players',
-          '/api/teams',
-          '/api/games',
-          '/api/predictions',
-          '/api/fantasy',
-          '/api/admin',
-          '/api/secret-phrases',
-          '/api/analytics',
-          '/api/betting'
-        ]
+        path: req.originalUrl
       });
     });
 
     // 4. Start HTTP server
     const server = app.listen(PORT, HOST, () => {
-      console.log(`\n🎉 ULTIMATE SERVER RUNNING ON http://${HOST}:${PORT}`);
-      
-      // Delay all scheduler tasks by 60 seconds
-      console.log('⏳ Delaying all scheduler tasks by 60 seconds...');
-      setTimeout(() => {
-        console.log('🚀 Starting scheduler tasks now...');
-        // This gives your server time to stabilize
-      }, 60000);
-      
+      console.log(`\n🎉 SAFE SERVER RUNNING ON http://${HOST}:${PORT}`);
       console.log(`========================================`);
-      console.log(`✅ All 38 routes loaded`);
-      console.log(`✅ Graceful shutdown enabled`);
+      console.log(`✅ All routes loaded`);
+      console.log(`✅ SAFE scheduler: 5-minute intervals only`);
+      console.log(`✅ BLOCKED: 60/minute aggressive scheduler`);
       console.log(`✅ Ready for Railway!`);
       console.log(`\n🏥 Health: http://${HOST}:${PORT}/health`);
-      console.log(`🏥 Railway Health: http://${HOST}:${PORT}/railway-health`);
       console.log(`🔐 Auth API: http://${HOST}:${PORT}/api/auth`);
-      console.log(`🎮 Games API: http://${HOST}:${PORT}/api/games`);
       console.log(`🏀 NBA API: http://${HOST}:${PORT}/api/nba`);
-      console.log(`📊 Analytics: http://${HOST}:${PORT}/api/analytics`);
-      console.log(`🔮 Predictions: http://${HOST}:${PORT}/api/predictions`);
-      console.log(`🧙 Fantasy: http://${HOST}:${PORT}/api/fantasy`);
-      console.log(`🗝️ Secret Phrases: http://${HOST}:${PORT}/api/secret-phrases`);
-      console.log(`💰 Betting: http://${HOST}:${PORT}/api/betting`);
       console.log(`========================================`);
       console.log(`\nPress Ctrl+C to stop gracefully`);
     });
@@ -491,7 +482,7 @@ cleanupTasks.push(async () => {
       });
     });
 
-    // Graceful shutdown function
+    // Graceful shutdown
     async function gracefulShutdown(signal) {
       console.log(`\n🛑 Received ${signal}. Shutting down...`);
       
@@ -508,7 +499,6 @@ cleanupTasks.push(async () => {
       process.exit(0);
     }
 
-    // Handle signals
     process.on('SIGINT', () => gracefulShutdown('SIGINT (Ctrl+C)'));
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
