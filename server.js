@@ -1,4 +1,3 @@
-jerryexon@3 nba-backend % cat server.js
 // Emergency crash handler
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION! Shutting down...', err);
