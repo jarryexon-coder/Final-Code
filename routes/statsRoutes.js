@@ -142,7 +142,7 @@ router.get('/categories/:sport', async (req, res) => {
  *         schema:
  *           type: string
  *           pattern: '^\d{4}-\d{2}$'
- *         description: Season filter (format: YYYY-YY)
+ *         description: 'Season filter (format: YYYY-YY)'
  *       - in: query
  *         name: min_games
  *         schema:
@@ -587,7 +587,7 @@ router.get('/teams', async (req, res) => {
  *         schema:
  *           type: string
  *           pattern: '^\d{4}-\d{2}$'
- *         description: Season filter (format: YYYY-YY)
+ *         description: 'Season filter (format: YYYY-YY)'
  *       - in: query
  *         name: stat_category
  *         schema:

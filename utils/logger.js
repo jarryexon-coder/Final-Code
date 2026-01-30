@@ -1,5 +1,6 @@
-// utils/logger.js
+// utils/logger.js - Fixed version
 import winston from 'winston';
+import morgan from 'morgan';
 
 const { combine, timestamp, printf, colorize, errors } = winston.format;
 
@@ -24,7 +25,7 @@ const logger = winston.createLogger({
     new winston.transports.File({ 
       filename: 'logs/error.log', 
       level: 'error',
-      maxsize: 5242880, // 5MB
+      maxsize: 5242880,
       maxFiles: 5
     }),
     new winston.transports.File({ 
@@ -38,11 +39,13 @@ const logger = winston.createLogger({
   ]
 });
 
-// Morgan middleware integration
-export const morganMiddleware = {
-  write: (message) => {
-    logger.info(message.trim());
+// Create proper morgan middleware
+const morganMiddleware = morgan('combined', {
+  stream: {
+    write: (message) => logger.info(message.trim())
   }
-};
+});
 
+// Export both as named exports
+export { logger, morganMiddleware };
 export default logger;

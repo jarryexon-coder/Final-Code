@@ -27,7 +27,7 @@
   "license": "MIT",
   "dependencies": {
     "@sentry/node": "^8.0.0",
-    "@sentry/profiling-node": "^8.0.0",
+    "@sentry/profiling-node": "^8.55.0",
     "axios": "^1.6.0",
     "bcryptjs": "^3.0.3",
     "compression": "^1.7.4",
@@ -40,6 +40,7 @@
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.0.0",
+    "morgan": "^1.10.1",
     "node-cache": "^5.1.2",
     "node-schedule": "^2.1.1",
     "swagger-jsdoc": "^6.2.8",
