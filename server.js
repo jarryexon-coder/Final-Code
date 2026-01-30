@@ -210,6 +210,26 @@ let serverReady = false;
 let schedulerJob = null;
 
 // ====================
+// CORS CONFIGURATION FROM FILE 1
+// ====================
+
+// Define allowed origins
+const allowedOrigins = [
+  'https://februaryfantasy-production.up.railway.app',
+  'http://localhost:19006',
+  'http://localhost:3000',
+  'http://localhost:8080',
+  'http://localhost:8081'
+];
+
+// Add Railway domain if it exists
+if (process.env.RAILWAY_PUBLIC_DOMAIN) {
+  allowedOrigins.push(process.env.RAILWAY_PUBLIC_DOMAIN);
+}
+
+console.log('✅ CORS configured for:', allowedOrigins);
+
+// ====================
 // CRITICAL FIX: HEALTH ENDPOINTS MUST WORK IMMEDIATELY
 // ====================
 
@@ -274,46 +294,48 @@ app.get('/api/internal-test', (req, res) => {
 });
 
 // ====================
-// Other middleware (AFTER health endpoints!)
+// Apply CORS middleware FROM FILE 1
 // ====================
-
-// Updated CORS configuration from File 1
-const allowedOrigins = [
-  'https://februaryfantasy-production.up.railway.app',
-  'http://localhost:19006',
-  'http://localhost:3000',
-  'http://localhost:8080',
-  'http://localhost:8081',
-  process.env.RAILWAY_PUBLIC_DOMAIN
-].filter(Boolean);
-
-// Remove any duplicates and ensure proper format
-console.log('✅ CORS configured for:', allowedOrigins);
-
 app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl)
-    if (!origin) return callback(null, true);
-    
-    // Check if origin is in allowed list
-    if (allowedOrigins.includes(origin)) {
+    // Allow requests with no origin (like mobile apps, curl, postman)
+    if (!origin) {
+      console.log('🔄 Request with no origin - allowing');
       return callback(null, true);
     }
     
-    // Allow all Railway domains
-    if (origin.includes('.railway.app')) {
+    // Check if origin is explicitly allowed
+    if (allowedOrigins.includes(origin)) {
+      console.log(`✅ Allowing origin: ${origin}`);
+      return callback(null, true);
+    }
+    
+    // Special case: Allow any Railway domain
+    if (origin.endsWith('.railway.app')) {
       console.log(`✅ Allowing Railway domain: ${origin}`);
       return callback(null, true);
     }
     
-    // Block everything else
+    // Log blocked origins
     console.log(`❌ CORS blocked: ${origin}`);
-    return callback(new Error('Not allowed by CORS'));
+    console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`);
+    
+    const error = new Error('Not allowed by CORS');
+    error.status = 403;
+    return callback(error);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept'],
+  exposedHeaders: ['Content-Length', 'Access-Control-Allow-Origin']
 }));
+
+// Handle preflight OPTIONS requests
+app.options('*', cors());
+
+// ====================
+// Other middleware
+// ====================
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(compression());
@@ -344,6 +366,9 @@ app.get('/', (req, res) => {
       '/railway-health',
       '/api/health',
       '/api/internal-test',
+      '/api/cors-debug',
+      '/api/cors-test-headers',
+      '/api/debug',
       '/api/cors-test',
       '/api/auth',
       '/api/nba',
@@ -356,7 +381,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Debug endpoint from File 1
+// Debug endpoint
 app.get('/api/debug', (req, res) => {
   res.json({
     success: true,
@@ -368,7 +393,7 @@ app.get('/api/debug', (req, res) => {
   });
 });
 
-// CORS test endpoint from File 2
+// Old CORS test endpoint
 app.get('/api/cors-test', (req, res) => {
   const origin = req.get('origin') || req.get('referer') || 'no-origin';
   
@@ -383,13 +408,73 @@ app.get('/api/cors-test', (req, res) => {
 });
 
 // ====================
+// CORS DEBUG ENDPOINTS FROM FILE 2
+// ====================
+
+// CORS debug endpoint
+app.get('/api/cors-debug', (req, res) => {
+  const origin = req.get('origin') || 'no-origin';
+  const referer = req.get('referer') || 'no-referer';
+  
+  res.json({
+    success: true,
+    message: 'CORS debug endpoint',
+    request: {
+      origin: origin,
+      referer: referer,
+      method: req.method,
+      headers: {
+        'access-control-request-method': req.get('access-control-request-method'),
+        'access-control-request-headers': req.get('access-control-request-headers')
+      }
+    },
+    cors: {
+      allowedOrigins: allowedOrigins,
+      isAllowed: allowedOrigins.includes(origin) || origin.endsWith('.railway.app')
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Test if CORS headers are being sent
+app.get('/api/cors-test-headers', (req, res) => {
+  // Manually set CORS headers
+  const origin = req.get('origin');
+  if (origin && (allowedOrigins.includes(origin) || origin.endsWith('.railway.app'))) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+  
+  res.json({
+    success: true,
+    message: 'CORS headers test',
+    headers: {
+      'Access-Control-Allow-Origin': res.getHeader('Access-Control-Allow-Origin'),
+      'Access-Control-Allow-Credentials': res.getHeader('Access-Control-Allow-Credentials')
+    },
+    origin: origin,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ====================
 // MIDDLEWARE: Block other routes during startup (EXCEPT health endpoints)
 // ====================
 app.use((req, res, next) => {
   // Skip for health endpoints (already defined above)
-  if (req.path === '/health' || req.path === '/railway-health' || req.path === '/api/health' || 
-      req.path === '/' || req.path === '/api/internal-test' || req.path === '/api/debug' || 
-      req.path === '/api/cors-test') {
+  const allowedDuringStartup = [
+    '/health',
+    '/railway-health', 
+    '/api/health',
+    '/',
+    '/api/internal-test',
+    '/api/debug',
+    '/api/cors-test',
+    '/api/cors-debug',
+    '/api/cors-test-headers'
+  ];
+  
+  if (allowedDuringStartup.includes(req.path)) {
     return next();
   }
   
@@ -478,7 +563,8 @@ async function startServer() {
       console.log(`🏥 Health: http://${HOST}:${PORT}/health`);
       console.log(`🏥 Railway Health: http://${HOST}:${PORT}/railway-health`);
       console.log(`🔧 Internal Test: http://${HOST}:${PORT}/api/internal-test`);
-      console.log(`🔧 CORS Test: http://${HOST}:${PORT}/api/cors-test`);
+      console.log(`🔧 CORS Debug: http://${HOST}:${PORT}/api/cors-debug`);
+      console.log(`🔧 CORS Headers Test: http://${HOST}:${PORT}/api/cors-test-headers`);
       console.log(`\nPress Ctrl+C to stop gracefully`);
     });
     
