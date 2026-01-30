@@ -277,67 +277,43 @@ app.get('/api/internal-test', (req, res) => {
 // Other middleware (AFTER health endpoints!)
 // ====================
 
-// CORS configuration   
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : [
-      'http://localhost:19006', 
-      'http://localhost:3000',
-      'http://localhost:8081',
-      'http://localhost:19000',
-      'https://februaryfantasy-production.up.railway.app'
-    ];
-
-// Add Railway domains
-const railwayDomains = [
-  process.env.RAILWAY_PUBLIC_DOMAIN,
-  process.env.RAILWAY_STATIC_URL,
-  process.env.RAILWAY_SERVICE_PLEASING_DETERMINATION_URL,
-  process.env.RAILWAY_SERVICE_AI_FRONTEND_REPO_URL
-].filter(Boolean);
-
-railwayDomains.forEach(domain => {
-  if (domain && !allowedOrigins.includes(domain)) {
-    allowedOrigins.push(domain);
-  }
-});
-
-// Add from file 1 - ensure these are included
-const additionalOrigins = [
+// Updated CORS configuration from File 1
+const allowedOrigins = [
   'https://februaryfantasy-production.up.railway.app',
-  process.env.RAILWAY_PUBLIC_DOMAIN,
-  'http://localhost:19006'
+  'http://localhost:19006',
+  'http://localhost:3000',
+  'http://localhost:8080',
+  'http://localhost:8081',
+  process.env.RAILWAY_PUBLIC_DOMAIN
 ].filter(Boolean);
 
-additionalOrigins.forEach(origin => {
-  if (origin && !allowedOrigins.includes(origin)) {
-    allowedOrigins.push(origin);
-  }
-});
+// Remove any duplicates and ensure proper format
+console.log('✅ CORS configured for:', allowedOrigins);
 
-const CORS_TEST_MODE = process.env.CORS_TEST_MODE === 'true';
-
-if (CORS_TEST_MODE) {
-  console.log('⚠️  CORS TEST MODE ENABLED - Allowing all origins');
-  app.use(cors({ origin: '*', credentials: true }));
-} else {
-  app.use(cors({
-    origin: (origin, callback) => {  
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      if (origin.includes('.railway.app') || origin.includes('.railway.internal')) {
-        return callback(null, true);
-      }
-      console.log(`❌ CORS blocked: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range']
-  }));
-  console.log('✅ CORS configured for:', allowedOrigins);
-}
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl)
+    if (!origin) return callback(null, true);
+    
+    // Check if origin is in allowed list
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Allow all Railway domains
+    if (origin.includes('.railway.app')) {
+      console.log(`✅ Allowing Railway domain: ${origin}`);
+      return callback(null, true);
+    }
+    
+    // Block everything else
+    console.log(`❌ CORS blocked: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 app.use(compression());
@@ -368,6 +344,7 @@ app.get('/', (req, res) => {
       '/railway-health',
       '/api/health',
       '/api/internal-test',
+      '/api/cors-test',
       '/api/auth',
       '/api/nba',
       '/api/players',
@@ -379,7 +356,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// Debug endpoint
+// Debug endpoint from File 1
 app.get('/api/debug', (req, res) => {
   res.json({
     success: true,
@@ -391,13 +368,28 @@ app.get('/api/debug', (req, res) => {
   });
 });
 
+// CORS test endpoint from File 2
+app.get('/api/cors-test', (req, res) => {
+  const origin = req.get('origin') || req.get('referer') || 'no-origin';
+  
+  res.json({
+    success: true,
+    message: 'CORS test endpoint',
+    origin: origin,
+    allowed: true,
+    timestamp: new Date().toISOString(),
+    allowedOrigins: allowedOrigins
+  });
+});
+
 // ====================
 // MIDDLEWARE: Block other routes during startup (EXCEPT health endpoints)
 // ====================
 app.use((req, res, next) => {
   // Skip for health endpoints (already defined above)
   if (req.path === '/health' || req.path === '/railway-health' || req.path === '/api/health' || 
-      req.path === '/' || req.path === '/api/internal-test' || req.path === '/api/debug') {
+      req.path === '/' || req.path === '/api/internal-test' || req.path === '/api/debug' || 
+      req.path === '/api/cors-test') {
     return next();
   }
   
@@ -486,6 +478,7 @@ async function startServer() {
       console.log(`🏥 Health: http://${HOST}:${PORT}/health`);
       console.log(`🏥 Railway Health: http://${HOST}:${PORT}/railway-health`);
       console.log(`🔧 Internal Test: http://${HOST}:${PORT}/api/internal-test`);
+      console.log(`🔧 CORS Test: http://${HOST}:${PORT}/api/cors-test`);
       console.log(`\nPress Ctrl+C to stop gracefully`);
     });
     
