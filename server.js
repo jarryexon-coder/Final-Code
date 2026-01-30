@@ -1,3 +1,5 @@
+// server.js - ES Module with proper imports
+
 // EMERGENCY FIX: IMMEDIATE HEALTH CHECK RESPONSE
 // ====================
 // CRITICAL: DISABLE ALL EXTERNAL API CALLS ON STARTUP
@@ -21,17 +23,6 @@ global.setTimeout = function(callback, delay, ...args) {
   
   return originalSetTimeout(callback, delay, ...args);
 };
-
-// 2. Clear node-schedule if it exists
-if (global.schedule) {
-  console.log('🚨 Clearing global.schedule jobs');
-  Object.values(global.schedule?.scheduledJobs || {}).forEach(job => {
-    try { job.cancel(); } catch {}
-  });
-}
-
-// 3. Patch node-schedule AFTER it's imported (we'll do this later)
-// We'll handle this in the initializeSafeScheduler function
 
 // ====================
 // CONTINUE WITH ORIGINAL FILE 2 CODE
@@ -134,22 +125,6 @@ function initializeSafeScheduler() {
   
   console.log('⏰ Initializing SAFE throttled scheduler (every 5 minutes)');
   
-  // EMERGENCY: Patch the schedule object before using it
-  if (schedule && schedule.scheduleJob) {
-    const originalScheduleJob = schedule.scheduleJob;
-    schedule.scheduleJob = (...args) => {
-      console.log('🛑 SAFE: scheduleJob intercepted - using safe 5-minute interval');
-      // Only allow */5 * * * * pattern (every 5 minutes)
-      const pattern = args[0];
-      if (pattern !== '*/5 * * * *') {
-        console.log(`🚨 BLOCKED aggressive schedule pattern: ${pattern}`);
-        console.log('✅ Using safe 5-minute pattern instead');
-        args[0] = '*/5 * * * *';
-      }
-      return originalScheduleJob.apply(schedule, args);
-    };
-  }
-  
   // SAFE: Schedule job to run every 5 minutes ONLY
   const job = schedule.scheduleJob('*/5 * * * *', async () => {
     console.log('⏰ SAFE scheduled NBA data fetch (5-minute interval)');
@@ -161,12 +136,6 @@ function initializeSafeScheduler() {
     console.log('🚀 Running initial SAFE NBA data fetch');
     safeFetchNBAData();
   }, 10000);
-  
-  // EMERGENCY: Clear ANY existing aggressive schedules
-  console.log('🚨 Clearing any existing aggressive schedules...');
-  Object.values(schedule.scheduledJobs).forEach(job => {
-    job.cancel();
-  });
   
   return job;
 }
@@ -187,7 +156,6 @@ async function loadSafeNBARoutes() {
   } catch (error) {
     console.error('❌ NBA routes failed:', error.message);
     // Fallback
-    import express from 'express';
     const router = express.Router();
     router.get('/', (req, res) => res.json({ message: 'NBA API' }));
     return router;
@@ -217,8 +185,10 @@ process.on('uncaughtException', (error) => {
 });
 
 // ====================
-// Express setup
+// Express setup - MUST BE AT THE TOP LEVEL
 // ====================
+
+// Import all modules at the top
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -227,11 +197,6 @@ import compression from 'compression';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
 import schedule from 'node-schedule';
-
-// ====================
-// REMOVED: TARGETED FIX SECTION
-// Now using simple monitoring instead of blocking
-// ====================
 
 console.log('✅ Simple scheduler monitoring enabled');
 
@@ -293,15 +258,30 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// 4. Internal networking test endpoint
+app.get('/api/internal-test', (req, res) => {
+  res.json({
+    success: true,
+    headers: req.headers,
+    host: req.get('host'),
+    ip: req.ip,
+    railway: {
+      environment: process.env.RAILWAY_ENVIRONMENT,
+      publicDomain: process.env.RAILWAY_PUBLIC_DOMAIN,
+      staticUrl: process.env.RAILWAY_STATIC_URL
+    }
+  });
+});
+
 // ====================
 // Other middleware (AFTER health endpoints!)
 // ====================
 
-// CORS configuration
-const allowedOrigins = process.env.ALLOWED_ORIGINS 
+// CORS configuration   
+const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',')
   : [
-      'http://localhost:19006',
+      'http://localhost:19006', 
       'http://localhost:3000',
       'http://localhost:8081',
       'http://localhost:19000',
@@ -319,6 +299,19 @@ const railwayDomains = [
 railwayDomains.forEach(domain => {
   if (domain && !allowedOrigins.includes(domain)) {
     allowedOrigins.push(domain);
+  }
+});
+
+// Add from file 1 - ensure these are included
+const additionalOrigins = [
+  'https://februaryfantasy-production.up.railway.app',
+  process.env.RAILWAY_PUBLIC_DOMAIN,
+  'http://localhost:19006'
+].filter(Boolean);
+
+additionalOrigins.forEach(origin => {
+  if (origin && !allowedOrigins.includes(origin)) {
+    allowedOrigins.push(origin);
   }
 });
 
@@ -340,7 +333,8 @@ if (CORS_TEST_MODE) {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range']
   }));
   console.log('✅ CORS configured for:', allowedOrigins);
 }
@@ -373,6 +367,7 @@ app.get('/', (req, res) => {
       '/health',
       '/railway-health',
       '/api/health',
+      '/api/internal-test',
       '/api/auth',
       '/api/nba',
       '/api/players',
@@ -401,7 +396,8 @@ app.get('/api/debug', (req, res) => {
 // ====================
 app.use((req, res, next) => {
   // Skip for health endpoints (already defined above)
-  if (req.path === '/health' || req.path === '/railway-health' || req.path === '/api/health' || req.path === '/') {
+  if (req.path === '/health' || req.path === '/railway-health' || req.path === '/api/health' || 
+      req.path === '/' || req.path === '/api/internal-test' || req.path === '/api/debug') {
     return next();
   }
   
@@ -489,6 +485,7 @@ async function startServer() {
       console.log(`========================================`);
       console.log(`🏥 Health: http://${HOST}:${PORT}/health`);
       console.log(`🏥 Railway Health: http://${HOST}:${PORT}/railway-health`);
+      console.log(`🔧 Internal Test: http://${HOST}:${PORT}/api/internal-test`);
       console.log(`\nPress Ctrl+C to stop gracefully`);
     });
     
