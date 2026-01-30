@@ -1,4 +1,4 @@
-// EMERGENCY FIX: COMPLETELY STOP 60 REQUESTS/MINUTE ISSUE
+// EMERGENCY FIX: IMMEDIATE HEALTH CHECK RESPONSE
 // ====================
 // CRITICAL: DISABLE ALL EXTERNAL API CALLS ON STARTUP
 // ====================
@@ -14,29 +14,33 @@ if (originalFetch) {
   };
 }
 
-// 2. COMPLETELY DISABLE aggressive scheduler imports
+// 2. DISABLE aggressive scheduler imports
 process.env.DISABLE_SCHEDULER = 'true';
 process.env.DISABLE_API_CALLS = 'true';
 
-// 3. Create a startup barrier
+// 3. Create startup tracker (NO LONGER A BARRIER FOR HEALTH CHECKS)
 let startupComplete = false;
+let startupBarrierResolve;
 const startupBarrier = new Promise((resolve) => {
-  setTimeout(() => {
-    startupComplete = true;
-    console.log('✅ Startup complete - API calls now allowed');
-    // Restore original functions
-    if (originalFetch) global.fetch = originalFetch;
-    process.env.DISABLE_SCHEDULER = 'false';
-    process.env.DISABLE_API_CALLS = 'false';
-    
-    // Initialize SAFE scheduler now
-    if (!schedulerJob) {
-      schedulerJob = initializeSafeScheduler();
-    }
-    
-    resolve();
-  }, 180000); // 3 MINUTE startup cooldown
+  startupBarrierResolve = resolve;
 });
+
+// Start the async startup process
+setTimeout(() => {
+  startupComplete = true;
+  console.log('✅ Startup complete - API calls now allowed');
+  // Restore original functions
+  if (originalFetch) global.fetch = originalFetch;
+  process.env.DISABLE_SCHEDULER = 'false';
+  process.env.DISABLE_API_CALLS = 'false';
+  
+  // Initialize SAFE scheduler now
+  if (!schedulerJob) {
+    schedulerJob = initializeSafeScheduler();
+  }
+  
+  startupBarrierResolve();
+}, 180000); // 3 MINUTE startup cooldown (but health checks work immediately)
 
 // ====================
 // EMERGENCY: SAFE THROTTLED SCHEDULER
@@ -103,13 +107,11 @@ function initializeSafeScheduler() {
     await safeFetchNBAData();
   });
   
-  // Also run once after server is ready
-  if (serverReady) {
-    setTimeout(() => {
-      console.log('🚀 Running initial SAFE NBA data fetch');
-      safeFetchNBAData();
-    }, 30000); // Wait 30 seconds after server ready
-  }
+  // Run initial fetch after scheduler is set up
+  setTimeout(() => {
+    console.log('🚀 Running initial SAFE NBA data fetch');
+    safeFetchNBAData();
+  }, 10000);
   
   // EMERGENCY: Clear ANY existing aggressive schedules
   console.log('🚨 Clearing any existing aggressive schedules...');
@@ -164,10 +166,13 @@ async function loadSafeNBARoutes() {
 // ====================
 // Memory monitoring (safe interval)
 // ====================
-setInterval(() => {
-  const used = process.memoryUsage();
-  console.log(`🧠 Memory: ${Math.round(used.heapUsed / 1024 / 1024)}MB`);
-}, 30000); // Log every 30 seconds
+let memoryMonitor;
+if (typeof setInterval !== 'undefined') {
+  memoryMonitor = setInterval(() => {
+    const used = process.memoryUsage();
+    console.log(`🧠 Memory: ${Math.round(used.heapUsed / 1024 / 1024)}MB`);
+  }, 30000); // Log every 30 seconds
+}
 
 // ====================
 // Error handlers
@@ -203,18 +208,57 @@ let serverReady = false;
 let schedulerJob = null;
 
 // ====================
-// Middleware
+// CRITICAL FIX: HEALTH ENDPOINTS MUST WORK IMMEDIATELY
 // ====================
-app.use((req, res, next) => {
-  if (!serverReady && req.path !== '/health' && req.path !== '/railway-health') {
-    return res.status(503).json({
-      status: 'starting',
-      message: 'Server is starting up, please wait...',
-      readyIn: '30 seconds'
+
+// 1. SIMPLE HEALTH CHECK (Available immediately)
+app.get('/health', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    service: 'NBA Fantasy AI Backend',
+    startup: startupComplete ? 'complete' : 'in-progress',
+    scheduler: 'safe (5-minute intervals)'
+  });
+});
+
+// 2. RAILWAY HEALTH CHECK (Available immediately - NO BLOCKING!)
+app.get('/railway-health', (req, res) => {
+  // CRITICAL: This must return immediately with 200 status
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: Date.now(),
+    startup: startupComplete ? 'complete' : 'in-progress',
+    server: 'listening'
+  });
+});
+
+// 3. API Health with DB status (Available immediately, async but non-blocking)
+app.get('/api/health', async (req, res) => {
+  try {
+    const mongoState = mongoose.connection.readyState;
+    const mongoStatus = mongoState === 1 ? 'connected' : mongoState === 2 ? 'connecting' : 'disconnected';
+    
+    res.json({
+      status: 'healthy',
+      databases: { mongodb: mongoStatus },
+      timestamp: new Date().toISOString(),
+      scheduler: 'safe-throttled',
+      startup: startupComplete ? 'complete' : 'in-progress'
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: 'degraded',
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
-  next();
 });
+
+// ====================
+// Other middleware (AFTER health endpoints!)
+// ====================
 
 // CORS configuration
 const allowedOrigins = process.env.ALLOWED_ORIGINS 
@@ -224,7 +268,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
       'http://localhost:3000',
       'http://localhost:8081',
       'http://localhost:19000',
-      'https://februaryfantasy-production.up.railway.app' // ADD YOUR FRONTEND
+      'https://februaryfantasy-production.up.railway.app'
     ];
 
 // Add Railway domains
@@ -278,39 +322,16 @@ app.use((req, res, next) => {
 });
 
 // ====================
-// Health endpoints
+// Other routes
 // ====================
-app.get('/health', (req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.status(200).end(JSON.stringify({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    service: 'NBA Fantasy AI Backend',
-    scheduler: 'safe (5-minute intervals)'
-  }));
-});
 
-app.get('/railway-health', (req, res) => {
-  res.status(200).json({ status: 'ok', timestamp: Date.now() });
-});
-
-app.get('/api/health', (req, res) => {
-  const mongoState = mongoose.connection.readyState;
-  const mongoStatus = mongoState === 1 ? 'connected' : mongoState === 2 ? 'connecting' : 'disconnected';
-  
-  res.json({
-    status: 'healthy',
-    databases: { mongodb: mongoStatus },
-    timestamp: new Date().toISOString(),
-    scheduler: 'safe-throttled'
-  });
-});
-
+// Root endpoint
 app.get('/', (req, res) => {
   res.json({ 
     message: 'NBA Fantasy AI Backend Server (SAFE MODE)',
     status: 'OK',
     scheduler: 'Throttled to 5-minute intervals',
+    startup: startupComplete ? 'complete' : 'in-progress',
     endpoints: [
       '/health',
       '/railway-health',
@@ -326,14 +347,37 @@ app.get('/', (req, res) => {
   });
 });
 
+// Debug endpoint
 app.get('/api/debug', (req, res) => {
   res.json({
     success: true,
     message: 'Direct debug route works',
     timestamp: new Date().toISOString(),
     server: 'NBA Fantasy AI Backend (Safe Mode)',
-    scheduler: '5-minute intervals only'
+    scheduler: '5-minute intervals only',
+    startup: startupComplete ? 'complete' : 'in-progress'
   });
+});
+
+// ====================
+// MIDDLEWARE: Block other routes during startup (EXCEPT health endpoints)
+// ====================
+app.use((req, res, next) => {
+  // Skip for health endpoints (already defined above)
+  if (req.path === '/health' || req.path === '/railway-health' || req.path === '/api/health' || req.path === '/') {
+    return next();
+  }
+  
+  // Block other routes during startup
+  if (!startupComplete) {
+    return res.status(503).json({
+      status: 'starting',
+      message: 'Server is starting up, please wait...',
+      readyIn: '3 minutes max',
+      progress: 'loading routes and initializing scheduler'
+    });
+  }
+  next();
 });
 
 // ====================
@@ -350,19 +394,66 @@ async function startServer() {
     // 1. Connect to MongoDB
     console.log('🔄 Connecting to MongoDB...');
     await mongoose.connect(process.env.MONGODB_URI, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 10000, // Increased timeout
       socketTimeoutMS: 45000,
     });
     console.log('✅ MongoDB connected successfully');
     
-    // 2. Initialize SAFE scheduler
-    console.log('⏰ Setting up SAFE throttled scheduler...');
-    if (!startupComplete) {
-      console.log('⏳ Waiting for startup completion before starting scheduler...');
-      await startupBarrier;
-    }
+    // 2. Mark server as ready for HTTP connections
+    serverReady = true;
+    console.log('✅ Server marked as ready for HTTP connections');
     
-    schedulerJob = initializeSafeScheduler();
+    // 3. Load essential routes (non-blocking, async)
+    console.log('\n🔗 Loading essential routes in background...');
+    
+    // Load safe NBA routes
+    setTimeout(async () => {
+      try {
+        const nbaRouter = await loadSafeNBARoutes();
+        app.use('/api/nba', nbaRouter);
+        console.log('✅ NBA routes loaded at /api/nba');
+      } catch (error) {
+        console.error('❌ Failed to load NBA routes:', error.message);
+      }
+    }, 1000);
+    
+    // Load other essential routes
+    const essentialRoutes = [
+      { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
+      { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
+      { path: '/api/players', file: 'players.js', name: 'Players Routes' }
+    ];
+    
+    essentialRoutes.forEach((route, index) => {
+      setTimeout(async () => {
+        try {
+          const module = await import(`./routes/${route.file}`);
+          if (module.default) {
+            app.use(route.path, module.default);
+            console.log(`✅ ${route.name} loaded at ${route.path}`);
+          }
+        } catch (error) {
+          console.log(`❌ Could not load ${route.name}: ${error.message}`);
+        }
+      }, 2000 + (index * 1000)); // Stagger loading
+    });
+    
+    // 4. Initialize SAFE scheduler (in background)
+    console.log('⏰ Setting up SAFE throttled scheduler in background...');
+    setTimeout(() => {
+      schedulerJob = initializeSafeScheduler();
+    }, 5000);
+    
+    // 5. Start HTTP server (MOST IMPORTANT - THIS HAPPENS IMMEDIATELY!)
+    const server = app.listen(PORT, HOST, () => {
+      console.log(`\n🎉 HTTP SERVER LISTENING ON http://${HOST}:${PORT}`);
+      console.log('✅ Health endpoints available immediately');
+      console.log('✅ Railway health check will PASS');
+      console.log(`========================================`);
+      console.log(`🏥 Health: http://${HOST}:${PORT}/health`);
+      console.log(`🏥 Railway Health: http://${HOST}:${PORT}/railway-health`);
+      console.log(`\nPress Ctrl+C to stop gracefully`);
+    });
     
     // Add cleanup tasks
     cleanupTasks.push(async () => {
@@ -382,97 +473,6 @@ async function startServer() {
       }
     });
     
-    // 3. Load routes with SAFE NBA route loader
-    console.log('\n🔗 Loading your existing routes...');
-    
-    const routesToLoad = [
-      { path: '/api/auth', file: 'authRoutes.js', name: 'Auth Routes' },
-      { path: '/api/nba', loader: loadSafeNBARoutes, name: 'NBA Routes (SAFE)' }, // USE SAFE LOADER
-      { path: '/api/admin', file: 'adminRoutes.js', name: 'Admin Routes' },
-      { path: '/api/analytics', file: 'analytics.js', name: 'Analytics Routes' },
-      { path: '/api/predictions', file: 'predictions.js', name: 'Predictions Routes' },
-      { path: '/api/fantasy', file: 'fantasyRoutes.js', name: 'Fantasy Routes' },
-      { path: '/api/players', file: 'players.js', name: 'Players Routes' },
-      { path: '/api/teams', file: 'teamsRoutes.js', name: 'Teams Routes' },
-      { path: '/api/games', file: 'games.js', name: 'Games Routes' },
-      // Add other essential routes as needed
-    ];
-
-    let loadedCount = 0;
-    let failedCount = 0;
-
-    for (const route of routesToLoad) {
-      try {
-        console.log(`🔧 Loading: ${route.name}`);
-        
-        if (route.loader) {
-          // Use custom loader for NBA routes
-          const router = await route.loader();
-          app.use(route.path, router);
-          console.log(`✅ ${route.name} loaded at ${route.path}`);
-          loadedCount++;
-        } else {
-          // Standard loader for other routes
-          const loadPromise = import(`./routes/${route.file}`);
-          const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Load timeout after 5s')), 5000)
-          );
-          
-          const module = await Promise.race([loadPromise, timeoutPromise]);
-          
-          if (module.default) {
-            const router = module.default;
-            app.use(route.path, router);
-            console.log(`✅ ${route.name} loaded at ${route.path}`);
-            loadedCount++;
-          } else {
-            console.log(`⚠ ${route.name} has unexpected export format`);
-            failedCount++;
-          }
-        }
-        
-      } catch (error) {
-        console.log(`❌ Could not load ${route.name}: ${error.message}`);
-        failedCount++;
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    console.log(`\n📊 Routes loaded: ${loadedCount} successful, ${failedCount} failed`);
-    
-    // 404 handler
-    app.use('*', (req, res) => {
-      console.log(`❌ 404: ${req.method} ${req.originalUrl}`);
-      res.status(404).json({
-        success: false,
-        error: 'Endpoint not found',
-        path: req.originalUrl
-      });
-    });
-
-    // 4. Start HTTP server
-    const server = app.listen(PORT, HOST, () => {
-      console.log(`\n🎉 SAFE SERVER RUNNING ON http://${HOST}:${PORT}`);
-      console.log(`========================================`);
-      console.log(`✅ All routes loaded`);
-      console.log(`✅ SAFE scheduler: 5-minute intervals only`);
-      console.log(`✅ BLOCKED: 60/minute aggressive scheduler`);
-      console.log(`✅ Ready for Railway!`);
-      console.log(`\n🏥 Health: http://${HOST}:${PORT}/health`);
-      console.log(`🔐 Auth API: http://${HOST}:${PORT}/api/auth`);
-      console.log(`🏀 NBA API: http://${HOST}:${PORT}/api/nba`);
-      console.log(`========================================`);
-      console.log(`\nPress Ctrl+C to stop gracefully`);
-    });
-
-    // Mark server as ready after 30 seconds
-    setTimeout(() => {
-      serverReady = true;
-      console.log('✅ Server marked as ready for all requests');
-    }, 30000);
-
-    // Add server cleanup
     cleanupTasks.push(() => {
       return new Promise(resolve => {
         server.close(() => {
@@ -481,7 +481,7 @@ async function startServer() {
         });
       });
     });
-
+    
     // Graceful shutdown
     async function gracefulShutdown(signal) {
       console.log(`\n🛑 Received ${signal}. Shutting down...`);
@@ -498,7 +498,7 @@ async function startServer() {
       console.log('✅ Shutdown complete');
       process.exit(0);
     }
-
+    
     process.on('SIGINT', () => gracefulShutdown('SIGINT (Ctrl+C)'));
     process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
