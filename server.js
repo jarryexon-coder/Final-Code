@@ -1,3 +1,14 @@
+jerryexon@3 nba-backend % cat server.js
+// Emergency crash handler
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION! Shutting down...', err);
+  // Don't exit - try to keep running
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION at:', promise, 'reason:', reason);
+});
+
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -281,14 +292,14 @@ async function startServer() {
     console.log('✅ MongoDB connected successfully');
     
     // Add MongoDB cleanup
-    cleanupTasks.push(() => {
-      return new Promise(resolve => {
-        mongoose.connection.close(false, () => {
-          console.log('✅ MongoDB connection closed');
-          resolve();
-        });
-      });
-    });
+cleanupTasks.push(async () => {
+  try {
+    await mongoose.connection.close();  // ✅ NEW WAY without callback
+    console.log('✅ MongoDB connection closed');
+  } catch (error) {
+    console.log('⚠️ MongoDB close error:', error.message);
+  }
+});
     
     // 2. Initialize Firebase if credentials exist
     if (process.env.FIREBASE_CREDENTIALS_JSON) {
