@@ -4,6 +4,58 @@
 // ====================
 console.log('🚫 DISABLING all external API calls during startup');
 
+// ====================
+// NUCLEAR OPTION: KILL ALL SCHEDULERS (FROM FILE 1) - SIMPLIFIED ES MODULE VERSION
+// ====================
+console.log('🚨 NUCLEAR OPTION: Killing all schedulers globally');
+
+// 1. Clear ALL intervals and timeouts
+const globalOriginalSetInterval = global.setInterval; // Renamed to avoid conflict
+const globalOriginalSetTimeout = global.setTimeout;   // Renamed to avoid conflict
+
+// Track all intervals
+const trackedIntervals = new Set();
+const trackedTimeouts = new Set();
+
+global.setInterval = (callback, delay, ...args) => {
+  console.log(`🛑 INTERVAL CREATION BLOCKED: ${delay}ms`);
+  console.trace('Interval stack trace');
+  const id = globalOriginalSetInterval(() => {
+    console.log('🛑 Interval callback blocked');
+  }, delay, ...args);
+  trackedIntervals.add(id);
+  return id;
+};
+
+global.setTimeout = (callback, delay, ...args) => {
+  // Only allow timeouts > 30 seconds (block rapid ones)
+  if (delay < 30000) {
+    console.log(`🛑 TIMEOUT BLOCKED (too fast): ${delay}ms`);
+    console.trace('Timeout stack trace');
+    const id = globalOriginalSetTimeout(() => {
+      console.log('🛑 Timeout callback blocked');
+    }, delay, ...args);
+    trackedTimeouts.add(id);
+    return id;
+  }
+  return globalOriginalSetTimeout(callback, delay, ...args);
+};
+
+// 2. Clear node-schedule if it exists
+if (global.schedule) {
+  console.log('🚨 Clearing global.schedule jobs');
+  Object.values(global.schedule?.scheduledJobs || {}).forEach(job => {
+    try { job.cancel(); } catch {}
+  });
+}
+
+// 3. Patch node-schedule AFTER it's imported (we'll do this later)
+// We'll handle this in the initializeSafeScheduler function
+
+// ====================
+// CONTINUE WITH ORIGINAL FILE 2 CODE
+// ====================
+
 // 1. Monkey-patch fetch to block external calls
 const originalFetch = global.fetch;
 if (originalFetch) {
@@ -65,7 +117,7 @@ async function safeFetchNBAData() {
   console.log('🔄 SAFE NBA data fetch (throttled to 5 minutes)');
   
   try {
-    // Load ONLY the fetch function, not the aggressive scheduler
+    // Use direct import for NBA routes
     const nbaModule = await import('./routes/nbaRoutes.js');
     
     // EMERGENCY: Check if this is the aggressive 60/min scheduler
@@ -101,6 +153,22 @@ function initializeSafeScheduler() {
   
   console.log('⏰ Initializing SAFE throttled scheduler (every 5 minutes)');
   
+  // EMERGENCY: Patch the schedule object before using it
+  if (schedule && schedule.scheduleJob) {
+    const originalScheduleJob = schedule.scheduleJob;
+    schedule.scheduleJob = (...args) => {
+      console.log('🛑 SAFE: scheduleJob intercepted - using safe 5-minute interval');
+      // Only allow */5 * * * * pattern (every 5 minutes)
+      const pattern = args[0];
+      if (pattern !== '*/5 * * * *') {
+        console.log(`🚨 BLOCKED aggressive schedule pattern: ${pattern}`);
+        console.log('✅ Using safe 5-minute pattern instead');
+        args[0] = '*/5 * * * *';
+      }
+      return originalScheduleJob.apply(schedule, args);
+    };
+  }
+  
   // SAFE: Schedule job to run every 5 minutes ONLY
   const job = schedule.scheduleJob('*/5 * * * *', async () => {
     console.log('⏰ SAFE scheduled NBA data fetch (5-minute interval)');
@@ -123,42 +191,65 @@ function initializeSafeScheduler() {
 }
 
 // ====================
-// EMERGENCY PATCH: Block aggressive scheduler in nbaRoutes.js
+// EMERGENCY PATCH: REPLACED WITH FILE 1 VERSION (SIMPLIFIED)
 // ====================
+// EMERGENCY: Load SAFE NBA routes (COMPLETELY DISABLE 60/min)
 async function loadSafeNBARoutes() {
-  console.log('🔧 Loading SAFE NBA routes (blocking aggressive scheduler)...');
+  console.log('🔧 Loading EMERGENCY SAFE NBA routes...');
   
   try {
-    const nbaModule = await import('./routes/nbaRoutes.js');
+    // Try to load the patch first
+    try {
+      const { createSafeNBARouter } = await import('./routes/nbaRoutes-patch.js');
+      const safeRouter = createSafeNBARouter();
+      console.log('✅ Loaded nbaRoutes-patch.js');
+      return safeRouter;
+    } catch (patchError) {
+      console.log('⚠️ nbaRoutes-patch.js not found, patching original module:', patchError.message);
+    }
     
-    // EMERGENCY: Patch any aggressive scheduler
-    if (nbaModule.default && nbaModule.default.startScheduler) {
-      console.log('🚨 PATCHING aggressive scheduler in nbaRoutes.js');
+    // Load and patch the original module
+    const originalModule = await import('./routes/nbaRoutes.js');
+    
+    // EMERGENCY: Also attempt to disable the original module's scheduler
+    if (originalModule.default) {
+      if (typeof originalModule.default.startScheduler === 'function') {
+        originalModule.default.startScheduler = () => {
+          console.log('🛑 EMERGENCY: Original startScheduler BLOCKED');
+          return { cancel: () => {} };
+        };
+      }
       
-      // Replace aggressive scheduler with safe version
-      const originalStartScheduler = nbaModule.default.startScheduler;
-      nbaModule.default.startScheduler = function() {
-        console.log('🛑 BLOCKED: Aggressive 60/min scheduler from nbaRoutes.js');
-        console.log('✅ Using safe 5-minute scheduler instead');
-        return null; // Return null to prevent execution
-      };
-      
-      // Also patch any other scheduler functions
-      if (nbaModule.default.scheduleJob) {
-        nbaModule.default.scheduleJob = function() {
-          console.log('🛑 BLOCKED: scheduleJob in nbaRoutes.js');
+      if (typeof originalModule.default.scheduleJob === 'function') {
+        originalModule.default.scheduleJob = () => {
+          console.log('🛑 EMERGENCY: Original scheduleJob BLOCKED');
           return { cancel: () => {} };
         };
       }
     }
     
-    return nbaModule.default;
+    // Patch the module's exports
+    Object.keys(originalModule).forEach(key => {
+      if (key.includes('Scheduler') || key.includes('schedule')) {
+        originalModule[key] = () => {
+          console.log(`🛑 EMERGENCY: ${key} BLOCKED`);
+          return { cancel: () => {} };
+        };
+      }
+    });
+    
+    // Return the patched module
+    return originalModule.default || originalModule;
+    
   } catch (error) {
-    console.error('❌ Error loading NBA routes:', error.message);
-    // Return minimal router
+    console.error('❌ Emergency NBA routes failed:', error.message);
+    // Fallback to minimal router
     const express = await import('express');
     const router = express.Router();
-    router.get('/', (req, res) => res.json({ message: 'NBA API (safe mode)' }));
+    router.get('/', (req, res) => res.json({ 
+      message: 'NBA API (Emergency Fallback)',
+      status: 'safe'
+    }));
     return router;
   }
 }
@@ -167,8 +258,9 @@ async function loadSafeNBARoutes() {
 // Memory monitoring (safe interval)
 // ====================
 let memoryMonitor;
-if (typeof setInterval !== 'undefined') {
-  memoryMonitor = setInterval(() => {
+// We'll create this with the original setInterval since we patched it
+if (typeof globalOriginalSetInterval !== 'undefined') {
+  memoryMonitor = globalOriginalSetInterval(() => {
     const used = process.memoryUsage();
     console.log(`🧠 Memory: ${Math.round(used.heapUsed / 1024 / 1024)}MB`);
   }, 30000); // Log every 30 seconds
@@ -197,6 +289,122 @@ import compression from 'compression';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
 import schedule from 'node-schedule';
+
+// ====================
+// ES MODULES VERSION: TARGETED FIX - Block ONLY the 60/min scheduler
+// ====================
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+
+console.log('🎯 TARGETED FIX: Blocking ONLY aggressive 60/min scheduler');
+
+// Track scheduler origins to identify the bad one
+const schedulerOrigins = new Map();
+
+// 1. Intercept node-schedule imports to track where they come from
+const Module = await import('module');
+const originalRequire = Module.default.prototype.require;
+
+Module.default.prototype.require = function(id) {
+  const result = originalRequire.apply(this, arguments);
+  
+  if (id === 'node-schedule' || id.includes('node-schedule')) {
+    // Get the calling file's path
+    const stack = new Error().stack;
+    const callerMatch = stack.match(/at .*?\((.*?):\d+:\d+\)/);
+    const callerFile = callerMatch ? callerMatch[1] : 'unknown';
+    
+    console.log(`📝 node-schedule imported by: ${callerFile}`);
+    
+    // If it's from nbaRoutes.js, return a SAFE mock
+    if (callerFile.includes('nbaRoutes.js')) {
+      console.log('🚨 BLOCKING: Aggressive scheduler from nbaRoutes.js');
+      
+      const safeSchedule = {
+        scheduleJob: (pattern, callback) => {
+          console.log(`🛑 BLOCKED: scheduleJob from ${callerFile}`);
+          console.log(`   Pattern: ${pattern}, Would run: ${callback.name || 'anonymous'}`);
+          
+          // Only allow patterns that are NOT aggressive
+          if (pattern === '*/5 * * * *') {
+            console.log('✅ ALLOWING: Safe 5-minute pattern');
+            const job = result.scheduleJob(pattern, () => {
+              console.log('✅ Safe 5-minute scheduler running');
+              callback();
+            });
+            return job;
+          }
+          
+          // Block anything else (especially '* * * * *' - every minute)
+          return {
+            cancel: () => console.log('Mock job cancelled')
+          };
+        },
+        scheduledJobs: {},
+        cancelJob: () => {},
+        gracefulShutdown: () => {}
+      };
+      
+      schedulerOrigins.set(callerFile, 'BLOCKED');
+      return safeSchedule;
+    }
+    
+    schedulerOrigins.set(callerFile, 'ALLOWED');
+  }
+  
+  return result;
+};
+
+// 2. Also intercept setInterval/setTimeout but be more selective
+// Use different variable names to avoid redeclaration
+const localOriginalSetInterval = global.setInterval;
+const localOriginalSetTimeout = global.setTimeout;
+
+global.setInterval = function(callback, delay, ...args) {
+  // Check stack trace to see who's calling
+  const stack = new Error().stack;
+  
+  // BLOCK if it's from nbaRoutes.js AND delay is too short (< 1 minute)
+  if (stack.includes('nbaRoutes.js') && delay < 60000) {
+    console.log(`🛑 BLOCKED setInterval from nbaRoutes.js: ${delay}ms`);
+    console.log(`   Callback: ${callback.name || 'anonymous'}`);
+    
+    // Return a mock interval that does nothing
+    const id = localOriginalSetInterval(() => {
+      console.log('🛑 Blocked interval callback (would run every ' + delay + 'ms)');
+    }, delay, ...args);
+    return id;
+  }
+  
+  // Allow normal intervals
+  return localOriginalSetInterval(callback, delay, ...args);
+};
+
+global.setTimeout = function(callback, delay, ...args) {
+  const stack = new Error().stack;
+  
+  // BLOCK rapid timeouts from nbaRoutes.js
+  if (stack.includes('nbaRoutes.js') && delay < 60000) {
+    console.log(`🛑 BLOCKED setTimeout from nbaRoutes.js: ${delay}ms`);
+    
+    // Return a mock timeout
+    const id = localOriginalSetTimeout(() => {
+      console.log('🛑 Blocked timeout callback');
+    }, delay, ...args);
+    return id;
+  }
+  
+  return localOriginalSetTimeout(callback, delay, ...args);
+};
+
+// 3. Log scheduler status
+setTimeout(() => {
+  console.log('\n📊 Scheduler Status Report:');
+  schedulerOrigins.forEach((status, file) => {
+    console.log(`   ${file}: ${status}`);
+  });
+  console.log('✅ Targeted blocking active');
+}, 10000);
 
 const app = express();
 const PORT = process.env.PORT || 3002;
