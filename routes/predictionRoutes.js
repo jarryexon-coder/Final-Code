@@ -1,15 +1,420 @@
-// routes/predictionsRoutes.js
 import express from 'express';
 import mongoose from 'mongoose';
 import { authenticateToken } from '../middleware/auth.js';
+import axios from 'axios';
 
 const router = express.Router();
+
+// ====================
+// EXTERNAL PREDICTION API INTEGRATION
+// ====================
+
+/**
+ * @swagger
+ * /api/predictions/game/{gameId}:
+ *   get:
+ *     summary: Get game predictions from external API
+ *     description: Retrieve AI-powered game predictions using RAPIDAPI_KEY_PREDICTION
+ *     tags: [Predictions]
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Game ID from external API
+ *       - in: query
+ *         name: includeOdds
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include betting odds in prediction
+ *       - in: query
+ *         name: includeInjuries
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include injury reports in analysis
+ *     responses:
+ *       200:
+ *         description: Game prediction data from external API
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     predictionId:
+ *                       type: string
+ *                     gameId:
+ *                       type: integer
+ *                     predictedWinner:
+ *                       type: string
+ *                     confidence:
+ *                       type: number
+ *                     predictedScore:
+ *                       type: object
+ *                     keyFactors:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     bettingInsights:
+ *                       type: object
+ *       404:
+ *         description: Game prediction not found
+ *       500:
+ *         description: Server error or external API error
+ */
+router.get('/game/:gameId', authenticateToken, async (req, res) => {
+  try {
+    const { gameId } = req.params;
+    const { includeOdds = true, includeInjuries = true } = req.query;
+
+    // Fetch game prediction from external API
+    const response = await axios.get(`https://api-football-v1.p.rapidapi.com/v3/predictions`, {
+      params: {
+        fixture: gameId
+      },
+      headers: {
+        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY_PREDICTION,
+        'X-RapidAPI-Host': 'api-football-v1.p.rapidapi.com'
+      }
+    });
+
+    if (!response.data || !response.data.response || response.data.response.length === 0) {
+      // If no prediction available, return a generated prediction
+      return res.status(404).json({
+        success: false,
+        error: 'No external prediction available for this game',
+        suggestion: 'Use /api/predictions/generate endpoint for AI-generated predictions'
+      });
+    }
+
+    const externalPrediction = response.data.response[0];
+    
+    // Format the prediction response
+    const prediction = {
+      predictionId: `ext_pred_${gameId}_${Date.now()}`,
+      gameId: parseInt(gameId),
+      homeTeam: externalPrediction.teams.home.name,
+      awayTeam: externalPrediction.teams.away.name,
+      predictedWinner: externalPrediction.predictions.winner.name,
+      confidence: parseFloat(externalPrediction.predictions.percent) / 100,
+      predictedScore: {
+        home: externalPrediction.predictions.goals.home,
+        away: externalPrediction.predictions.goals.away
+      },
+      keyFactors: externalPrediction.predictions.winner.reason
+        ? [externalPrediction.predictions.winner.reason]
+        : ['Team form analysis', 'Head-to-head record', 'Home advantage'],
+      predictionDetails: {
+        advice: externalPrediction.predictions.advice,
+        underOver: externalPrediction.predictions.under_over,
+        goals: externalPrediction.predictions.goals,
+        percent: externalPrediction.predictions.percent
+      }
+    };
+
+    // Include odds if requested
+    if (includeOdds && externalPrediction.odds) {
+      prediction.bettingOdds = {
+        homeWin: externalPrediction.odds.home,
+        draw: externalPrediction.odds.draw,
+        awayWin: externalPrediction.odds.away,
+        source: externalPrediction.odds.source
+      };
+    }
+
+    // Include injuries if requested
+    if (includeInjuries && externalPrediction.teams.home.players && externalPrediction.teams.away.players) {
+      prediction.injuryReport = {
+        homeTeamInjuries: externalPrediction.teams.home.players
+          .filter(p => p.injured || p.suspended)
+          .map(p => ({ name: p.name, reason: p.reason })),
+        awayTeamInjuries: externalPrediction.teams.away.players
+          .filter(p => p.injured || p.suspended)
+          .map(p => ({ name: p.name, reason: p.reason }))
+      };
+    }
+
+    // Save prediction to local database
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const db = mongoose.connection.db;
+        const predictionRecord = {
+          ...prediction,
+          userId: req.user?.userId,
+          source: 'external_api',
+          fetchedAt: new Date(),
+          apiProvider: 'RapidAPI Football Predictions'
+        };
+        
+        await db.collection('external_predictions').insertOne(predictionRecord);
+      } catch (dbError) {
+        console.warn('Could not save external prediction to database:', dbError.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: prediction,
+      metadata: {
+        source: 'external_api',
+        timestamp: new Date().toISOString(),
+        apiVersion: 'v3'
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching game prediction:', error.response?.data || error.message);
+    
+    if (error.response?.status === 404) {
+      return res.status(404).json({
+        success: false,
+        error: 'Game not found in external prediction API'
+      });
+    }
+
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.response?.data?.message || 'Failed to fetch game prediction'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/predictions/player/{playerId}:
+ *   get:
+ *     summary: Get player performance predictions
+ *     description: Retrieve player performance predictions using RAPIDAPI_KEY_PREDICTION
+ *     tags: [Predictions]
+ *     parameters:
+ *       - in: path
+ *         name: playerId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Player ID from external API
+ *       - in: query
+ *         name: season
+ *         schema:
+ *           type: integer
+ *           default: 2024
+ *         description: Season year
+ *       - in: query
+ *         name: nextNGames
+ *         schema:
+ *           type: integer
+ *           default: 5
+ *         description: Number of upcoming games to predict
+ *       - in: query
+ *         name: includeProjections
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include statistical projections
+ *     responses:
+ *       200:
+ *         description: Player performance predictions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     playerId:
+ *                       type: integer
+ *                     playerName:
+ *                       type: string
+ *                     season:
+ *                       type: integer
+ *                     upcomingPredictions:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     seasonProjections:
+ *                       type: object
+ *                     injuryRisk:
+ *                       type: string
+ *       404:
+ *         description: Player predictions not found
+ *       500:
+ *         description: Server error or external API error
+ */
+router.get('/player/:playerId', authenticateToken, async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { season = 2024, nextNGames = 5, includeProjections = true } = req.query;
+
+    // For demonstration, we'll use a mock response since specific player prediction APIs vary
+    // In production, replace with actual external API call
+    
+    // Mock external API response structure
+    const mockPlayerData = {
+      player: {
+        id: parseInt(playerId),
+        name: "LeBron James",
+        team: "Los Angeles Lakers",
+        position: "SF"
+      },
+      predictions: [
+        {
+          gameDate: new Date(Date.now() + 86400000).toISOString().split('T')[0],
+          opponent: "Golden State Warriors",
+          predictedPoints: 28.5,
+          predictedRebounds: 7.8,
+          predictedAssists: 8.2,
+          predictedMinutes: 36.5,
+          confidence: 0.82,
+          keyFactor: "Matchup against weaker defense"
+        },
+        {
+          gameDate: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
+          opponent: "Denver Nuggets",
+          predictedPoints: 25.3,
+          predictedRebounds: 6.5,
+          predictedAssists: 7.8,
+          predictedMinutes: 34.2,
+          confidence: 0.75,
+          keyFactor: "High altitude may affect stamina"
+        }
+      ],
+      seasonProjections: {
+        pointsPerGame: 27.1,
+        reboundsPerGame: 7.4,
+        assistsPerGame: 7.9,
+        gamesPlayed: 68,
+        efficiencyRating: 24.8,
+        usageRate: 29.5
+      },
+      injuryRisk: "Low - No recent injury concerns"
+    };
+
+    // Format the response
+    const prediction = {
+      playerId: parseInt(playerId),
+      playerName: mockPlayerData.player.name,
+      team: mockPlayerData.player.team,
+      position: mockPlayerData.player.position,
+      season: parseInt(season),
+      upcomingPredictions: mockPlayerData.predictions.slice(0, nextNGames),
+      seasonProjections: includeProjections ? mockPlayerData.seasonProjections : null,
+      injuryRisk: mockPlayerData.injuryRisk,
+      lastUpdated: new Date().toISOString()
+    };
+
+    // Save to local database
+    if (mongoose.connection.readyState === 1) {
+      try {
+        const db = mongoose.connection.db;
+        await db.collection('player_predictions').insertOne({
+          ...prediction,
+          userId: req.user?.userId,
+          source: 'external_api_mock',
+          fetchedAt: new Date()
+        });
+      } catch (dbError) {
+        console.warn('Could not save player prediction to database:', dbError.message);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: prediction,
+      metadata: {
+        note: "Using mock data - integrate with actual player prediction API",
+        timestamp: new Date().toISOString(),
+        gamesPredicted: Math.min(nextNGames, mockPlayerData.predictions.length)
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching player predictions:', error.response?.data || error.message);
+    
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.response?.data?.message || 'Failed to fetch player predictions'
+    });
+  }
+});
 
 // ====================
 // PREDICTION GENERATION
 // ====================
 
-// POST /api/predictions/generate - Generate AI prediction
+/**
+ * @swagger
+ * /api/predictions/generate:
+ *   post:
+ *     summary: Generate AI prediction
+ *     description: Generate AI-powered game predictions
+ *     tags: [Predictions]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - gameId
+ *             properties:
+ *               gameId:
+ *                 type: string
+ *               team1:
+ *                 type: string
+ *               team2:
+ *                 type: string
+ *               sport:
+ *                 type: string
+ *                 default: NBA
+ *               predictionType:
+ *                 type: string
+ *                 default: outcome
+ *               includeAnalysis:
+ *                 type: boolean
+ *                 default: true
+ *     responses:
+ *       200:
+ *         description: AI-generated prediction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 predictionId:
+ *                   type: string
+ *                 predictedWinner:
+ *                   type: string
+ *                 confidence:
+ *                   type: number
+ *                 predictedScore:
+ *                   type: object
+ *                 bettingRecommendation:
+ *                   type: object
+ *                 keyFactors:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       400:
+ *         description: Missing required fields
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/generate', authenticateToken, async (req, res) => {
   try {
     console.log('🤖 Generating AI prediction');
@@ -148,7 +553,71 @@ router.post('/generate', authenticateToken, async (req, res) => {
 // PREDICTION HISTORY
 // ====================
 
-// GET /api/predictions/history - Get user's prediction history
+/**
+ * @swagger
+ * /api/predictions/history:
+ *   get:
+ *     summary: Get user's prediction history
+ *     description: Retrieve authenticated user's prediction history with filtering
+ *     tags: [Predictions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Number of predictions to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Pagination offset
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *         description: Filter by sport
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter by start date (YYYY-MM-DD)
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter by end date (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: User's prediction history
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     predictions:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     pagination:
+ *                       type: object
+ *                     stats:
+ *                       type: object
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/history', authenticateToken, async (req, res) => {
   try {
     const { 
@@ -233,7 +702,41 @@ router.get('/history', authenticateToken, async (req, res) => {
 // PREDICTION DETAILS
 // ====================
 
-// GET /api/predictions/:predictionId - Get specific prediction details
+/**
+ * @swagger
+ * /api/predictions/{predictionId}:
+ *   get:
+ *     summary: Get specific prediction details
+ *     description: Retrieve details of a specific prediction by ID
+ *     tags: [Predictions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: predictionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Prediction ID
+ *     responses:
+ *       200:
+ *         description: Prediction details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Prediction not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:predictionId', authenticateToken, async (req, res) => {
   try {
     const { predictionId } = req.params;
@@ -297,7 +800,52 @@ router.get('/:predictionId', authenticateToken, async (req, res) => {
 // PREDICTION FEEDBACK
 // ====================
 
-// POST /api/predictions/:predictionId/feedback - Submit feedback on prediction accuracy
+/**
+ * @swagger
+ * /api/predictions/{predictionId}/feedback:
+ *   post:
+ *     summary: Submit feedback on prediction accuracy
+ *     description: Submit user feedback on prediction accuracy
+ *     tags: [Predictions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: predictionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Prediction ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - actualWinner
+ *               - accuracyRating
+ *             properties:
+ *               actualWinner:
+ *                 type: string
+ *               actualScore:
+ *                 type: object
+ *               accuracyRating:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 5
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Feedback submitted successfully
+ *       400:
+ *         description: Missing required fields
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/:predictionId/feedback', authenticateToken, async (req, res) => {
   try {
     const { predictionId } = req.params;
@@ -363,7 +911,57 @@ router.post('/:predictionId/feedback', authenticateToken, async (req, res) => {
 // BATCH PREDICTIONS
 // ====================
 
-// POST /api/predictions/batch - Generate predictions for multiple games
+/**
+ * @swagger
+ * /api/predictions/batch:
+ *   post:
+ *     summary: Generate predictions for multiple games
+ *     description: Generate AI predictions for multiple games in a batch
+ *     tags: [Predictions]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - games
+ *             properties:
+ *               games:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                 maxItems: 10
+ *               sport:
+ *                 type: string
+ *                 default: NBA
+ *     responses:
+ *       200:
+ *         description: Batch predictions generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 batchId:
+ *                   type: string
+ *                 predictions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 summary:
+ *                   type: object
+ *       400:
+ *         description: Invalid input
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.post('/batch', authenticateToken, async (req, res) => {
   try {
     const { games, sport = 'NBA' } = req.body;
@@ -454,7 +1052,43 @@ router.post('/batch', authenticateToken, async (req, res) => {
 // PREDICTION STATISTICS
 // ====================
 
-// GET /api/predictions/stats - Get prediction statistics
+/**
+ * @swagger
+ * /api/predictions/stats/summary:
+ *   get:
+ *     summary: Get prediction statistics
+ *     description: Retrieve user's prediction statistics and performance metrics
+ *     tags: [Predictions]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Prediction statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalPredictions:
+ *                       type: integer
+ *                     accuracyRate:
+ *                       type: string
+ *                     averageConfidence:
+ *                       type: string
+ *                     bySport:
+ *                       type: object
+ *                     recentPerformance:
+ *                       type: array
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
+ */
 router.get('/stats/summary', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;

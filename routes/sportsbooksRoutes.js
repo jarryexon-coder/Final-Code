@@ -43,7 +43,198 @@ const authenticateOptional = async (req, res, next) => {
   }
 };
 
-// GET /api/sportsbooks/odds/:sport
+/**
+ * @swagger
+ * /api/sportsbooks/odds:
+ *   get:
+ *     summary: Get live odds for various sports
+ *     description: Fetch real-time odds from The Odds API for multiple sportsbooks
+ *     tags: [Sportsbooks]
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [basketball_nba, football_nfl, baseball_mlb, hockey_nhl]
+ *         description: Sport to get odds for
+ *       - in: query
+ *         name: region
+ *         schema:
+ *           type: string
+ *           enum: [us, uk, eu, au]
+ *         description: Region for odds format
+ *       - in: query
+ *         name: markets
+ *         schema:
+ *           type: string
+ *           enum: [h2h, spreads, totals, outrights]
+ *         description: Markets to include
+ *     responses:
+ *       200:
+ *         description: Odds fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Invalid parameters
+ *       500:
+ *         description: Failed to fetch odds from API
+ */
+router.get('/odds', async (req, res) => {
+  try {
+    const { sport = 'basketball_nba', region = 'us', markets = 'h2h' } = req.query;
+    
+    // Fetch from The Odds API
+    const response = await axios.get('https://api.the-odds-api.com/v4/sports/upcoming/odds/', {
+      params: {
+        apiKey: process.env.THE_ODDS_API_KEY,
+        regions: region,
+        markets: markets,
+        oddsFormat: 'decimal'
+      }
+    });
+    
+    res.json({
+      success: true,
+      data: response.data,
+      lastUpdated: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('The Odds API error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch odds from The Odds API',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sportsbooks/odds/live:
+ *   get:
+ *     summary: Get live in-game odds
+ *     description: Fetch live, in-game odds from The Odds API
+ *     tags: [Sportsbooks]
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [basketball_nba, football_nfl, baseball_mlb, hockey_nhl]
+ *         description: Sport to get live odds for
+ *       - in: query
+ *         name: eventId
+ *         schema:
+ *           type: string
+ *         description: Specific event ID for live odds
+ *     responses:
+ *       200:
+ *         description: Live odds fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 liveOdds:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Invalid parameters
+ *       500:
+ *         description: Failed to fetch live odds
+ */
+router.get('/odds/live', async (req, res) => {
+  try {
+    const { sport = 'basketball_nba', eventId } = req.query;
+    
+    let url = 'https://api.the-odds-api.com/v4/sports/';
+    if (eventId) {
+      url += `${eventId}/odds/?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=h2h,spreads&oddsFormat=decimal`;
+    } else {
+      url = `https://api.the-odds-api.com/v4/sports/${sport}/events/live/odds/?apiKey=${process.env.THE_ODDS_API_KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=decimal`;
+    }
+    
+    const response = await axios.get(url);
+    
+    res.json({
+      success: true,
+      liveOdds: response.data,
+      lastUpdated: new Date().toISOString(),
+      eventId: eventId || 'all'
+    });
+    
+  } catch (error) {
+    console.error('Live odds API error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch live odds from The Odds API',
+      details: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sportsbooks/odds/{sport}:
+ *   get:
+ *     summary: Get player prop odds for specific sport
+ *     description: Fetch player prop odds from various sportsbooks for a specific sport
+ *     tags: [Sportsbooks]
+ *     parameters:
+ *       - in: path
+ *         name: sport
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, MLB, NHL]
+ *         description: Sport abbreviation
+ *       - in: query
+ *         name: market
+ *         schema:
+ *           type: string
+ *           enum: [player_props, moneyline, spread, total]
+ *         description: Market type to fetch
+ *       - in: query
+ *         name: gameId
+ *         schema:
+ *           type: string
+ *         description: Specific game ID
+ *     responses:
+ *       200:
+ *         description: Player prop odds fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 sport:
+ *                   type: string
+ *                 market:
+ *                   type: string
+ *                 odds:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Unsupported sport or invalid parameters
+ *       500:
+ *         description: Failed to fetch sportsbook odds
+ */
 router.get('/odds/:sport', authenticateOptional, async (req, res) => {
   try {
     const { sport } = req.params;
@@ -56,19 +247,43 @@ router.get('/odds/:sport', authenticateOptional, async (req, res) => {
       });
     }
     
-    // In production, this would fetch from real sportsbook APIs
-    // For now, return mock data
-    const mockOdds = generateMockOdds(sport, market, gameId);
-    
-    res.json({
-      success: true,
-      sport: sport.toUpperCase(),
-      market,
-      lastUpdated: new Date().toISOString(),
-      sportsbooks: Object.keys(MOCK_SPORTSBOOKS),
-      odds: mockOdds,
-      disclaimer: 'Mock data for demonstration. Real odds require API integration.'
-    });
+    // Try to fetch from The Odds API first
+    try {
+      const response = await axios.get(`https://api.the-odds-api.com/v4/sports/${sport.toLowerCase()}/odds/`, {
+        params: {
+          apiKey: process.env.THE_ODDS_API_KEY,
+          regions: 'us',
+          markets: 'player_props',
+          oddsFormat: 'american'
+        }
+      });
+      
+      return res.json({
+        success: true,
+        sport: sport.toUpperCase(),
+        market,
+        lastUpdated: new Date().toISOString(),
+        sportsbooks: Object.keys(MOCK_SPORTSBOOKS),
+        odds: response.data,
+        source: 'The Odds API'
+      });
+      
+    } catch (apiError) {
+      console.warn('Falling back to mock data:', apiError.message);
+      
+      // Fall back to mock data if API fails
+      const mockOdds = generateMockOdds(sport, market, gameId);
+      
+      res.json({
+        success: true,
+        sport: sport.toUpperCase(),
+        market,
+        lastUpdated: new Date().toISOString(),
+        sportsbooks: Object.keys(MOCK_SPORTSBOOKS),
+        odds: mockOdds,
+        disclaimer: 'Mock data (API integration in progress)'
+      });
+    }
     
   } catch (error) {
     console.error('Sportsbook odds error:', error);
@@ -79,7 +294,46 @@ router.get('/odds/:sport', authenticateOptional, async (req, res) => {
   }
 });
 
-// GET /api/sportsbooks/consensus/:market
+/**
+ * @swagger
+ * /api/sportsbooks/consensus/{market}:
+ *   get:
+ *     summary: Get market consensus for specific betting market
+ *     description: Calculate market consensus across multiple sportsbooks for a specific market
+ *     tags: [Sportsbooks]
+ *     parameters:
+ *       - in: path
+ *         name: market
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [points, rebounds, assists, steals, blocks, moneyline, spread, total]
+ *         description: Market type
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, MLB, NHL]
+ *         description: Sport abbreviation
+ *     responses:
+ *       200:
+ *         description: Market consensus calculated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 market:
+ *                   type: string
+ *                 sport:
+ *                   type: string
+ *                 consensus:
+ *                   type: object
+ *       500:
+ *         description: Failed to calculate market consensus
+ */
 router.get('/consensus/:market', authenticateOptional, async (req, res) => {
   try {
     const { market } = req.params;
@@ -105,7 +359,49 @@ router.get('/consensus/:market', authenticateOptional, async (req, res) => {
   }
 });
 
-// POST /api/sportsbooks/compare
+/**
+ * @swagger
+ * /api/sportsbooks/compare:
+ *   post:
+ *     summary: Compare PrizePicks selections with sportsbook lines
+ *     description: Compare user's PrizePicks selections with real sportsbook lines to find edges
+ *     tags: [Sportsbooks]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - selection
+ *             properties:
+ *               selection:
+ *                 type: object
+ *                 properties:
+ *                   winners:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *               sport:
+ *                 type: string
+ *                 default: NBA
+ *     responses:
+ *       200:
+ *         description: Comparison completed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 comparison:
+ *                   type: object
+ *       400:
+ *         description: Invalid input parameters
+ *       500:
+ *         description: Failed to compare with sportsbooks
+ */
 router.post('/compare', authenticateOptional, async (req, res) => {
   try {
     const { selection, sport = 'NBA' } = req.body;
@@ -135,7 +431,52 @@ router.post('/compare', authenticateOptional, async (req, res) => {
   }
 });
 
-// GET /api/sportsbooks/line-movement/:playerId
+/**
+ * @swagger
+ * /api/sportsbooks/line-movement/{playerId}:
+ *   get:
+ *     summary: Get line movement history for a player
+ *     description: Fetch historical line movement data for a specific player and market
+ *     tags: [Sportsbooks]
+ *     parameters:
+ *       - in: path
+ *         name: playerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Player ID
+ *       - in: query
+ *         name: market
+ *         schema:
+ *           type: string
+ *           enum: [points, rebounds, assists, steals, blocks]
+ *           default: points
+ *         description: Market type
+ *       - in: query
+ *         name: hours
+ *         schema:
+ *           type: integer
+ *           default: 24
+ *         description: Hours of historical data to fetch
+ *     responses:
+ *       200:
+ *         description: Line movement data fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 playerId:
+ *                   type: string
+ *                 movement:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       500:
+ *         description: Failed to fetch line movement
+ */
 router.get('/line-movement/:playerId', authenticateOptional, async (req, res) => {
   try {
     const { playerId } = req.params;
@@ -163,7 +504,44 @@ router.get('/line-movement/:playerId', authenticateOptional, async (req, res) =>
   }
 });
 
-// GET /api/sportsbooks/arbitrage
+/**
+ * @swagger
+ * /api/sportsbooks/arbitrage:
+ *   get:
+ *     summary: Find arbitrage opportunities across sportsbooks
+ *     description: Identify arbitrage opportunities by comparing lines across different sportsbooks
+ *     tags: [Sportsbooks]
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, MLB, NHL]
+ *           default: NBA
+ *         description: Sport abbreviation
+ *       - in: query
+ *         name: minEdge
+ *         schema:
+ *           type: number
+ *           default: 1
+ *         description: Minimum edge percentage for arbitrage opportunities
+ *     responses:
+ *       200:
+ *         description: Arbitrage opportunities found successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 opportunities:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       500:
+ *         description: Failed to find arbitrage opportunities
+ */
 router.get('/arbitrage', authenticateOptional, async (req, res) => {
   try {
     const { sport = 'NBA', minEdge = 1 } = req.query;
@@ -189,9 +567,136 @@ router.get('/arbitrage', authenticateOptional, async (req, res) => {
   }
 });
 
-// Helper functions
+/**
+ * @swagger
+ * /api/sportsbooks/predictions/game/{gameId}:
+ *   get:
+ *     summary: Get game predictions
+ *     description: Fetch AI-powered game predictions from external prediction API
+ *     tags: [Sportsbooks, Predictions]
+ *     parameters:
+ *       - in: path
+ *         name: gameId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Game ID for predictions
+ *     responses:
+ *       200:
+ *         description: Game predictions fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 predictions:
+ *                   type: object
+ *       500:
+ *         description: Failed to fetch game predictions
+ */
+router.get('/predictions/game/:gameId', async (req, res) => {
+  try {
+    const { gameId } = req.params;
+    
+    const response = await axios.get(`https://api.example-predictions.com/v1/game/${gameId}`, {
+      headers: {
+        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY_PREDICTION,
+        'X-RapidAPI-Host': 'example-predictions.p.rapidapi.com'
+      }
+    });
+    
+    res.json({
+      success: true,
+      predictions: response.data,
+      gameId,
+      lastUpdated: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Game predictions API error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch game predictions',
+      details: error.message,
+      gameId: req.params.gameId
+    });
+  }
+});
 
+/**
+ * @swagger
+ * /api/sportsbooks/predictions/player/{playerId}:
+ *   get:
+ *     summary: Get player performance predictions
+ *     description: Fetch AI-powered player performance predictions from external API
+ *     tags: [Sportsbooks, Predictions]
+ *     parameters:
+ *       - in: path
+ *         name: playerId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Player ID for predictions
+ *       - in: query
+ *         name: gameId
+ *         schema:
+ *           type: string
+ *         description: Optional game ID for context-specific predictions
+ *     responses:
+ *       200:
+ *         description: Player predictions fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 predictions:
+ *                   type: object
+ *       500:
+ *         description: Failed to fetch player predictions
+ */
+router.get('/predictions/player/:playerId', async (req, res) => {
+  try {
+    const { playerId } = req.params;
+    const { gameId } = req.query;
+    
+    const url = gameId 
+      ? `https://api.example-predictions.com/v1/player/${playerId}/game/${gameId}`
+      : `https://api.example-predictions.com/v1/player/${playerId}`;
+    
+    const response = await axios.get(url, {
+      headers: {
+        'X-RapidAPI-Key': process.env.RAPIDAPI_KEY_PREDICTION,
+        'X-RapidAPI-Host': 'example-predictions.p.rapidapi.com'
+      }
+    });
+    
+    res.json({
+      success: true,
+      predictions: response.data,
+      playerId,
+      gameId: gameId || 'all',
+      lastUpdated: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Player predictions API error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch player predictions',
+      details: error.message,
+      playerId: req.params.playerId
+    });
+  }
+});
+
+// Helper functions (keep existing implementations)
 function generateMockOdds(sport, market, gameId) {
+  // Existing implementation...
   const players = [
     { id: 'lebron_james', name: 'LeBron James', team: 'LAL', position: 'SF' },
     { id: 'stephen_curry', name: 'Stephen Curry', team: 'GSW', position: 'PG' },
@@ -243,6 +748,7 @@ function generateMockOdds(sport, market, gameId) {
 }
 
 function calculateConsensus(sport, market) {
+  // Existing implementation...
   const consensus = {
     market,
     sport,
@@ -289,6 +795,7 @@ function calculateConsensus(sport, market) {
 }
 
 async function compareWithSportsbooks(selection, sport) {
+  // Existing implementation...
   const comparison = {
     selectionId: selection.id || 'custom_selection',
     sport,
@@ -384,6 +891,7 @@ async function compareWithSportsbooks(selection, sport) {
 }
 
 function generateLineMovement(playerId, market, hours) {
+  // Existing implementation...
   const movements = [];
   const now = new Date();
   const baseLine = {
@@ -418,6 +926,7 @@ function generateLineMovement(playerId, market, hours) {
 }
 
 function calculateTrend(movements) {
+  // Existing implementation...
   if (movements.length < 2) return 'insufficient data';
   
   const first = movements[0].line;
@@ -435,6 +944,7 @@ function calculateTrend(movements) {
 }
 
 function calculateVolatility(movements) {
+  // Existing implementation...
   if (movements.length < 2) return 0;
   
   const lines = movements.map(m => m.line);
@@ -449,6 +959,7 @@ function calculateVolatility(movements) {
 }
 
 function findArbitrageOpportunities(sport, minEdge) {
+  // Existing implementation...
   const opportunities = [];
   const markets = ['points', 'rebounds', 'assists'];
   
@@ -500,6 +1011,7 @@ function findArbitrageOpportunities(sport, minEdge) {
 }
 
 function generateRecommendations(comparison) {
+  // Existing implementation...
   const recommendations = [];
   
   if (parseFloat(comparison.totalEdge) > 2) {

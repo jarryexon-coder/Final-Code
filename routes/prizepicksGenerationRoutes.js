@@ -27,7 +27,180 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-// GET /api/prizepicks/generate/status
+/**
+ * @swagger
+ * /api/prizepicks/odds:
+ *   get:
+ *     summary: Get odds for PrizePicks selections
+ *     description: Fetch betting odds from The Odds API for player props
+ *     tags: [PrizePicks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, MLB, NHL]
+ *         description: Sport to get odds for
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date for odds (YYYY-MM-DD)
+ *     responses:
+ *       200:
+ *         description: Odds retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 odds:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/PlayerOdds'
+ *       401:
+ *         description: Unauthorized - invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/odds', authenticate, async (req, res) => {
+  try {
+    const { sport = 'NBA', date } = req.query;
+    const apiKey = process.env.THE_ODDS_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'Odds API key not configured'
+      });
+    }
+
+    // Build API URL
+    let url = `https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?apiKey=${apiKey}&regions=us&markets=player_points,player_rebounds,player_assists&oddsFormat=american`;
+    
+    if (date) {
+      url += `&date=${date}`;
+    }
+
+    const response = await fetch(url);
+    const oddsData = await response.json();
+
+    res.json({
+      success: true,
+      odds: oddsData,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Odds fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch odds'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/prizepicks/odds/live:
+ *   get:
+ *     summary: Get live odds for PrizePicks selections
+ *     description: Fetch live betting odds from The Odds API for in-game player props
+ *     tags: [PrizePicks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, MLB, NHL]
+ *         description: Sport to get live odds for
+ *     responses:
+ *       200:
+ *         description: Live odds retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 liveOdds:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/LivePlayerOdds'
+ *       401:
+ *         description: Unauthorized - invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
+router.get('/odds/live', authenticate, async (req, res) => {
+  try {
+    const { sport = 'NBA' } = req.query;
+    const apiKey = process.env.THE_ODDS_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(500).json({
+        success: false,
+        error: 'Odds API key not configured'
+      });
+    }
+
+    // Build API URL for live odds
+    const url = `https://api.the-odds-api.com/v4/sports/basketball_nba/odds/?apiKey=${apiKey}&regions=us&markets=player_points,player_rebounds,player_assists&oddsFormat=american&live=true`;
+
+    const response = await fetch(url);
+    const liveOddsData = await response.json();
+
+    res.json({
+      success: true,
+      liveOdds: liveOddsData,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('Live odds fetch error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch live odds'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/prizepicks/generate/status:
+ *   get:
+ *     summary: Get PrizePicks generation status
+ *     description: Check daily limits and generation status for PrizePicks selections
+ *     tags: [PrizePicks]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 status:
+ *                   $ref: '#/components/schemas/GenerationStatus'
+ *       401:
+ *         description: Unauthorized - invalid or missing token
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/generate/status', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.userId);
@@ -73,7 +246,60 @@ router.get('/generate/status', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/prizepicks/generate/daily
+/**
+ * @swagger
+ * /api/prizepicks/generate/daily:
+ *   post:
+ *     summary: Generate daily PrizePicks selections
+ *     description: Generate 2 daily PrizePicks selections (3-winner parlays each) within daily limits
+ *     tags: [PrizePicks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               sport:
+ *                 type: string
+ *                 enum: [NBA, NFL, MLB, NHL]
+ *                 default: NBA
+ *               type:
+ *                 type: string
+ *                 enum: [parlay, single]
+ *                 default: parlay
+ *     responses:
+ *       200:
+ *         description: Daily selections generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 selections:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/PrizePickSelection'
+ *                 selectionsLeft:
+ *                   type: integer
+ *                 generatedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Daily limit reached or invalid parameters
+ *       401:
+ *         description: Unauthorized - invalid or missing token
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/generate/daily', authenticate, async (req, res) => {
   try {
     const { sport = 'NBA', type = 'parlay' } = req.body;
@@ -193,7 +419,70 @@ router.post('/generate/daily', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/prizepicks/generate/custom
+/**
+ * @swagger
+ * /api/prizepicks/generate/custom:
+ *   post:
+ *     summary: Generate custom PrizePicks selection
+ *     description: Create a custom PrizePicks selection with specified players, filters, and strategy
+ *     tags: [PrizePicks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               sport:
+ *                 type: string
+ *                 enum: [NBA, NFL, MLB, NHL]
+ *                 default: NBA
+ *               players:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of player IDs to include in selection
+ *               filters:
+ *                 type: object
+ *                 properties:
+ *                   position:
+ *                     type: string
+ *                   team:
+ *                     type: string
+ *                   minFantasyPoints:
+ *                     type: number
+ *               strategy:
+ *                 type: string
+ *                 enum: [balanced, aggressive, conservative]
+ *                 default: balanced
+ *     responses:
+ *       200:
+ *         description: Custom selection generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 selection:
+ *                   $ref: '#/components/schemas/PrizePickSelection'
+ *                 selectionsLeft:
+ *                   type: integer
+ *                 generatedAt:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Daily limit reached or invalid parameters
+ *       401:
+ *         description: Unauthorized - invalid or missing token
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/generate/custom', authenticate, async (req, res) => {
   try {
     const { sport, players, filters, strategy = 'balanced' } = req.body;
@@ -325,7 +614,54 @@ router.post('/generate/custom', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/prizepicks/generate/simulation
+/**
+ * @swagger
+ * /api/prizepicks/generate/simulation:
+ *   post:
+ *     summary: Simulate PrizePicks selection outcomes
+ *     description: Run Monte Carlo simulation on a PrizePicks selection to predict win rate and expected value
+ *     tags: [PrizePicks]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               selection:
+ *                 $ref: '#/components/schemas/PrizePickSelection'
+ *               simulations:
+ *                 type: integer
+ *                 minimum: 100
+ *                 maximum: 10000
+ *                 default: 1000
+ *     responses:
+ *       200:
+ *         description: Simulation completed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 simulationResults:
+ *                   $ref: '#/components/schemas/SimulationResults'
+ *                 recommendation:
+ *                   type: string
+ *                   enum: [RECOMMENDED, MODERATE, AVOID]
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Invalid selection (need exactly 3 winners)
+ *       401:
+ *         description: Unauthorized - invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/generate/simulation', authenticate, async (req, res) => {
   try {
     const { selection, simulations = 1000 } = req.body;

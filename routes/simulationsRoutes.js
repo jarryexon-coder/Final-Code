@@ -1,3 +1,4 @@
+// routes/simulationsRoutes.js - Simulation endpoints with JSDoc documentation
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import Player from '../models/Player.js';
@@ -5,6 +6,13 @@ import Selection from '../models/Selection.js';
 import User from '../models/User.js';
 
 const router = express.Router();
+
+/**
+ * @swagger
+ * tags:
+ *   - name: Simulations
+ *     description: Advanced betting simulation and Monte Carlo analysis
+ */
 
 // Authentication middleware
 const authenticate = async (req, res, next) => {
@@ -28,7 +36,104 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-// POST /api/simulate/selection
+/**
+ * @swagger
+ * /api/simulate/selection:
+ *   post:
+ *     summary: Simulate a 3-player selection outcome
+ *     description: Run Monte Carlo simulation for a 3-winner selection with configurable scenarios
+ *     tags: [Simulations]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - selection
+ *               - winners
+ *             properties:
+ *               selection:
+ *                 type: object
+ *                 required:
+ *                   - winners
+ *                 properties:
+ *                   winners:
+ *                     type: array
+ *                     items:
+ *                       type: object
+ *                       properties:
+ *                         playerId:
+ *                           type: string
+ *                         market:
+ *                           type: string
+ *                         pick:
+ *                           type: string
+ *                         confidence:
+ *                           type: number
+ *                   totalOdds:
+ *                     type: string
+ *                   stake:
+ *                     type: number
+ *               simulations:
+ *                 type: integer
+ *                 default: 1000
+ *                 minimum: 100
+ *                 maximum: 10000
+ *               scenario:
+ *                 type: string
+ *                 enum: [normal, conservative, aggressive, historical]
+ *                 default: normal
+ *     responses:
+ *       200:
+ *         description: Simulation completed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 simulation:
+ *                   type: object
+ *                   properties:
+ *                     totalSimulations:
+ *                       type: integer
+ *                     wins:
+ *                       type: integer
+ *                     losses:
+ *                       type: integer
+ *                     pushes:
+ *                       type: integer
+ *                     winRate:
+ *                       type: string
+ *                     expectedValue:
+ *                       type: string
+ *                     averageWinAmount:
+ *                       type: string
+ *                     standardDeviation:
+ *                       type: string
+ *                     totalPayout:
+ *                       type: string
+ *                     kellyCriterion:
+ *                       type: string
+ *                     confidence:
+ *                       type: string
+ *                     scenario:
+ *                       type: string
+ *                     parameters:
+ *                       type: object
+ *                     timestamp:
+ *                       type: string
+ *       400:
+ *         description: Invalid input parameters
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/selection', authenticate, async (req, res) => {
   try {
     const { selection, simulations = 1000, scenario } = req.body;
@@ -76,7 +181,104 @@ router.post('/selection', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/simulate/parlay
+/**
+ * @swagger
+ * /api/simulate/parlay:
+ *   post:
+ *     summary: Simulate a series of parlay bets
+ *     description: Run multiple simulations of parlay betting strategies over time
+ *     tags: [Simulations]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - selections
+ *             properties:
+ *               selections:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     confidence:
+ *                       type: number
+ *                     totalOdds:
+ *                       type: string
+ *                     description:
+ *                       type: string
+ *               bankroll:
+ *                 type: number
+ *                 default: 1000
+ *                 minimum: 100
+ *               strategy:
+ *                 type: string
+ *                 enum: [flat, kelly, aggressive, conservative]
+ *                 default: flat
+ *               simulations:
+ *                 type: integer
+ *                 default: 10000
+ *                 minimum: 1000
+ *                 maximum: 50000
+ *     responses:
+ *       200:
+ *         description: Parlay simulation completed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 simulation:
+ *                   type: object
+ *                   properties:
+ *                     simulations:
+ *                       type: integer
+ *                     totalWins:
+ *                       type: integer
+ *                     totalLosses:
+ *                       type: integer
+ *                     winRate:
+ *                       type: string
+ *                     totalProfit:
+ *                       type: string
+ *                     medianProfit:
+ *                       type: string
+ *                     peakBankroll:
+ *                       type: string
+ *                     troughBankroll:
+ *                       type: string
+ *                     maxDrawdown:
+ *                       type: string
+ *                     maxWinningStreak:
+ *                       type: integer
+ *                     maxLosingStreak:
+ *                       type: integer
+ *                     valueAtRisk:
+ *                       type: string
+ *                     expectedShortfall:
+ *                       type: string
+ *                     kellyOptimal:
+ *                       type: object
+ *                     bankrollStart:
+ *                       type: number
+ *                     bankrollEnd:
+ *                       type: number
+ *                     roi:
+ *                       type: string
+ *                     timestamp:
+ *                       type: string
+ *       400:
+ *         description: Invalid input parameters
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/parlay', authenticate, async (req, res) => {
   try {
     const { selections, bankroll = 1000, strategy = 'flat', simulations = 10000 } = req.body;
@@ -116,7 +318,97 @@ router.post('/parlay', authenticate, async (req, res) => {
   }
 });
 
-// GET /api/simulate/history
+/**
+ * @swagger
+ * /api/simulate/history:
+ *   get:
+ *     summary: Get simulation history
+ *     description: Retrieve past simulation results with pagination
+ *     tags: [Simulations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *           minimum: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           minimum: 1
+ *           maximum: 100
+ *         description: Number of results per page
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [selection, parlay, monte-carlo, scenario]
+ *         description: Filter by simulation type
+ *     responses:
+ *       200:
+ *         description: Simulation history retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 simulations:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       sport:
+ *                         type: string
+ *                       simulations:
+ *                         type: integer
+ *                       winRate:
+ *                         type: string
+ *                       expectedValue:
+ *                         type: string
+ *                       timestamp:
+ *                         type: string
+ *                       duration:
+ *                         type: integer
+ *                       result:
+ *                         type: string
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     total:
+ *                       type: integer
+ *                     pages:
+ *                       type: integer
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     totalSimulations:
+ *                       type: integer
+ *                     averageWinRate:
+ *                       type: string
+ *                     bestSimulation:
+ *                       type: string
+ *                     mostSimulatedSport:
+ *                       type: string
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
 router.get('/history', authenticate, async (req, res) => {
   try {
     const { page = 1, limit = 20, type } = req.query;
@@ -156,7 +448,100 @@ router.get('/history', authenticate, async (req, res) => {
   }
 });
 
-// POST /api/simulate/monte-carlo
+/**
+ * @swagger
+ * /api/simulate/monte-carlo:
+ *   post:
+ *     summary: Run advanced Monte Carlo simulation
+ *     description: Perform comprehensive Monte Carlo analysis for risk assessment and probability modeling
+ *     tags: [Simulations]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - selections
+ *             properties:
+ *               selections:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     confidence:
+ *                       type: number
+ *                     description:
+ *                       type: string
+ *               bankroll:
+ *                 type: number
+ *                 default: 1000
+ *                 minimum: 100
+ *               simulations:
+ *                 type: integer
+ *                 default: 10000
+ *                 minimum: 1000
+ *                 maximum: 100000
+ *               periods:
+ *                 type: integer
+ *                 default: 100
+ *                 minimum: 10
+ *                 maximum: 1000
+ *               confidenceLevel:
+ *                 type: number
+ *                 default: 0.95
+ *                 minimum: 0.5
+ *                 maximum: 0.99
+ *     responses:
+ *       200:
+ *         description: Monte Carlo simulation completed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 monteCarlo:
+ *                   type: object
+ *                   properties:
+ *                     simulations:
+ *                       type: integer
+ *                     periods:
+ *                       type: integer
+ *                     meanFinalValue:
+ *                       type: string
+ *                     medianFinalValue:
+ *                       type: string
+ *                     bestCase:
+ *                       type: string
+ *                     worstCase:
+ *                       type: string
+ *                     valueAtRisk:
+ *                       type: string
+ *                     expectedShortfall:
+ *                       type: string
+ *                     probabilityOfProfit:
+ *                       type: string
+ *                     confidenceLevel:
+ *                       type: number
+ *                     paths:
+ *                       type: array
+ *                       items:
+ *                         type: array
+ *                         items:
+ *                           type: number
+ *                     timestamp:
+ *                       type: string
+ *       400:
+ *         description: Invalid input parameters
+ *       401:
+ *         description: Unauthorized - Invalid or missing token
+ *       500:
+ *         description: Internal server error
+ */
 router.post('/monte-carlo', authenticate, async (req, res) => {
   try {
     const { 
@@ -203,6 +588,92 @@ router.post('/monte-carlo', authenticate, async (req, res) => {
     });
   }
 });
+
+/**
+ * @swagger
+ * components:
+ *   securitySchemes:
+ *     bearerAuth:
+ *       type: http
+ *       scheme: bearer
+ *       bearerFormat: JWT
+ *   schemas:
+ *     SimulationResult:
+ *       type: object
+ *       properties:
+ *         totalSimulations:
+ *           type: integer
+ *         wins:
+ *           type: integer
+ *         losses:
+ *           type: integer
+ *         pushes:
+ *           type: integer
+ *         winRate:
+ *           type: string
+ *         expectedValue:
+ *           type: string
+ *         averageWinAmount:
+ *           type: string
+ *         standardDeviation:
+ *           type: string
+ *         totalPayout:
+ *           type: string
+ *         kellyCriterion:
+ *           type: string
+ *         confidence:
+ *           type: string
+ *     ParlayResult:
+ *       type: object
+ *       properties:
+ *         simulations:
+ *           type: integer
+ *         totalWins:
+ *           type: integer
+ *         totalLosses:
+ *           type: integer
+ *         winRate:
+ *           type: string
+ *         totalProfit:
+ *           type: string
+ *         medianProfit:
+ *           type: string
+ *         peakBankroll:
+ *           type: string
+ *         troughBankroll:
+ *           type: string
+ *         maxDrawdown:
+ *           type: string
+ *         maxWinningStreak:
+ *           type: integer
+ *         maxLosingStreak:
+ *           type: integer
+ *         valueAtRisk:
+ *           type: string
+ *         expectedShortfall:
+ *           type: string
+ *     MonteCarloResult:
+ *       type: object
+ *       properties:
+ *         simulations:
+ *           type: integer
+ *         periods:
+ *           type: integer
+ *         meanFinalValue:
+ *           type: string
+ *         medianFinalValue:
+ *           type: string
+ *         bestCase:
+ *           type: string
+ *         worstCase:
+ *           type: string
+ *         valueAtRisk:
+ *           type: string
+ *         expectedShortfall:
+ *           type: string
+ *         probabilityOfProfit:
+ *           type: string
+ */
 
 // Helper function to run selection simulation
 async function runSelectionSimulation(selection, simulations, params) {

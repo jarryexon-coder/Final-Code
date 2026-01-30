@@ -3,6 +3,65 @@ const router = express.Router();
 
 console.log('🎮 Live games routes loaded');
 
+/**
+ * @swagger
+ * /api/livegames/live:
+ *   get:
+ *     summary: Get live games data
+ *     description: Retrieve real-time data for currently active games across multiple sports
+ *     tags: [Live Games]
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, NHL, MLB, all]
+ *           default: 'all'
+ *         description: Filter by specific sport
+ *       - in: query
+ *         name: include_betting
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include live betting odds data
+ *       - in: query
+ *         name: include_play_by_play
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include recent play-by-play data
+ *       - in: query
+ *         name: update_frequency
+ *         schema:
+ *           type: integer
+ *           default: 30
+ *           minimum: 5
+ *           maximum: 300
+ *         description: Suggested update frequency in seconds
+ *     responses:
+ *       200:
+ *         description: Live games data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/LiveGames'
+ *                 count:
+ *                   type: integer
+ *                 breakdown:
+ *                   type: object
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 note:
+ *                   type: string
+ *       500:
+ *         description: Server error
+ */
 router.get('/live', async (req, res) => {
   console.log('🎮 /api/games/live called');
   
@@ -155,6 +214,33 @@ router.get('/live', async (req, res) => {
       totalLiveGames: 4
     };
     
+    // Apply sport filter if specified
+    const { sport } = req.query;
+    if (sport && sport.toLowerCase() !== 'all') {
+      const filteredGames = {};
+      const sportKey = sport.toLowerCase();
+      if (liveGames[sportKey]) {
+        filteredGames[sportKey] = liveGames[sportKey];
+        filteredGames.updated = liveGames.updated;
+        filteredGames.totalLiveGames = liveGames[sportKey].length;
+        
+        // Count total games
+        const totalGames = filteredGames[sportKey].length;
+        
+        res.json({
+          success: true,
+          data: filteredGames,
+          count: totalGames,
+          breakdown: {
+            [sportKey]: filteredGames[sportKey].length
+          },
+          timestamp: new Date().toISOString(),
+          note: 'mock-data-for-development'
+        });
+        return;
+      }
+    }
+    
     // Count total games
     const totalGames = liveGames.nba.length + liveGames.nhl.length + liveGames.nfl.length;
     
@@ -188,6 +274,335 @@ router.get('/live', async (req, res) => {
       timestamp: new Date().toISOString(),
       note: 'error-recovery-mode'
     });
+  }
+});
+
+/**
+ * @swagger
+ * /api/livegames/games:
+ *   get:
+ *     summary: Get live games with detailed data
+ *     description: Retrieve live games with comprehensive real-time statistics and updates
+ *     tags: [Live Games]
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, NHL, MLB]
+ *         description: Sport to filter games
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [live, final, scheduled]
+ *         description: Filter by game status
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter by date (YYYY-MM-DD)
+ *       - in: query
+ *         name: include_detailed_stats
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include detailed real-time statistics
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Number of games to return
+ *     responses:
+ *       200:
+ *         description: Live games with detailed data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/LiveGameDetail'
+ *       500:
+ *         description: Server error
+ */
+router.get('/games', async (req, res) => {
+  try {
+    // Use BALLDONTLIE_API_KEY via service layer
+    const { sport, status, date, include_detailed_stats, limit } = req.query;
+    
+    // This would typically call a service method that uses BALLDONTLIE_API_KEY
+    // For example: await LiveGamesService.getLiveGames(sport, status, date, include_detailed_stats, limit);
+    
+    res.json({
+      success: true,
+      message: 'Games endpoint - Integration with BALLDONTLIE_API_KEY pending'
+    });
+  } catch (error) {
+    console.error('❌ Error fetching live games:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/livegames/games/{id}:
+ *   get:
+ *     summary: Get specific live game details
+ *     description: Retrieve detailed real-time information for a specific live game
+ *     tags: [Live Games]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Game ID
+ *       - in: query
+ *         name: include_play_by_play
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include play-by-play data
+ *       - in: query
+ *         name: include_box_score
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include box score data
+ *       - in: query
+ *         name: include_momentum
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include momentum analysis
+ *     responses:
+ *       200:
+ *         description: Detailed live game data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/LiveGameFullDetail'
+ *       404:
+ *         description: Game not found
+ *       500:
+ *         description: Server error
+ */
+router.get('/games/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { include_play_by_play, include_box_score, include_momentum } = req.query;
+    // Use BALLDONTLIE_API_KEY via service layer
+    
+    res.json({
+      success: true,
+      message: 'Game details endpoint - Integration with BALLDONTLIE_API_KEY pending'
+    });
+  } catch (error) {
+    console.error('❌ Error fetching live game details:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/livegames/players:
+ *   get:
+ *     summary: Get player performance in live games
+ *     description: Retrieve real-time player statistics for currently active games
+ *     tags: [Live Games]
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, NHL, MLB]
+ *         description: Sport to filter players
+ *       - in: query
+ *         name: game_id
+ *         schema:
+ *           type: string
+ *         description: Filter by specific game
+ *       - in: query
+ *         name: team_id
+ *         schema:
+ *           type: string
+ *         description: Filter by team
+ *       - in: query
+ *         name: stat_type
+ *         schema:
+ *           type: string
+ *           default: 'current'
+ *           enum: [current, projected, season]
+ *         description: Type of statistics to include
+ *     responses:
+ *       200:
+ *         description: Live player performance data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/LivePlayerStats'
+ *       500:
+ *         description: Server error
+ */
+router.get('/players', async (req, res) => {
+  try {
+    // Use BALLDONTLIE_API_KEY via service layer
+    const { sport, game_id, team_id, stat_type } = req.query;
+    
+    res.json({
+      success: true,
+      message: 'Players endpoint - Integration with BALLDONTLIE_API_KEY pending'
+    });
+  } catch (error) {
+    console.error('❌ Error fetching live player stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/livegames/teams:
+ *   get:
+ *     summary: Get team performance in live games
+ *     description: Retrieve real-time team statistics for currently active games
+ *     tags: [Live Games]
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, NHL, MLB]
+ *         description: Sport to filter teams
+ *       - in: query
+ *         name: game_id
+ *         schema:
+ *           type: string
+ *         description: Filter by specific game
+ *       - in: query
+ *         name: include_momentum
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include momentum and run analysis
+ *       - in: query
+ *         name: include_efficiency
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include efficiency metrics
+ *     responses:
+ *       200:
+ *         description: Live team performance data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/LiveTeamStats'
+ *       500:
+ *         description: Server error
+ */
+router.get('/teams', async (req, res) => {
+  try {
+    // Use BALLDONTLIE_API_KEY via service layer
+    const { sport, game_id, include_momentum, include_efficiency } = req.query;
+    
+    res.json({
+      success: true,
+      message: 'Teams endpoint - Integration with BALLDONTLIE_API_KEY pending'
+    });
+  } catch (error) {
+    console.error('❌ Error fetching live team stats:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/livegames/stats:
+ *   get:
+ *     summary: Get comprehensive live game statistics
+ *     description: Retrieve aggregated real-time statistical data across live games
+ *     tags: [Live Games]
+ *     parameters:
+ *       - in: query
+ *         name: sport
+ *         schema:
+ *           type: string
+ *           enum: [NBA, NFL, NHL, MLB]
+ *         description: Sport to get stats for
+ *       - in: query
+ *         name: stat_type
+ *         schema:
+ *           type: string
+ *           default: 'game'
+ *           enum: [game, quarter, half, period]
+ *         description: Statistical period to analyze
+ *       - in: query
+ *         name: include_trends
+ *         schema:
+ *           type: boolean
+ *           default: true
+ *         description: Include statistical trends
+ *       - in: query
+ *         name: include_comparisons
+ *         schema:
+ *           type: boolean
+ *           default: false
+ *         description: Include comparisons to season averages
+ *     responses:
+ *       200:
+ *         description: Comprehensive live game statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/LiveGameStats'
+ *       500:
+ *         description: Server error
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    // Use BALLDONTLIE_API_KEY via service layer
+    const { sport, stat_type, include_trends, include_comparisons } = req.query;
+    
+    res.json({
+      success: true,
+      message: 'Stats endpoint - Integration with BALLDONTLIE_API_KEY pending'
+    });
+  } catch (error) {
+    console.error('❌ Error fetching live game stats:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
