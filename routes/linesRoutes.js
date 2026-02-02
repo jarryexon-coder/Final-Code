@@ -3,6 +3,16 @@ import express from 'express';
 import axios from 'axios';
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "lines API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 /**
  * @swagger
  * /api/lines/odds:

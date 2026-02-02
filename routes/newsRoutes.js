@@ -3,6 +3,16 @@ import express from 'express';
 const router = express.Router();
 import axios from 'axios';
 
+// In your newsRoutes.js, add this at the top:
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'News API is working',
+    timestamp: new Date().toISOString(),
+    news: []
+  });
+});
+
 // Use your existing API keys from environment
 const BALLDONTLIE_API_KEY = process.env.BALLDONTLIE_API_KEY;
 const THE_ODDS_API_KEY = process.env.THE_ODDS_API_KEY;

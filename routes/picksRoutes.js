@@ -1,6 +1,17 @@
 import express from 'express';
 const router = express.Router();
 
+// Root Picks route
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Picks API is working',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0'
+  });
+});
+
+
 // Mock UserPick model (in production, import the actual model)
 const UserPick = {
   find: async () => [],

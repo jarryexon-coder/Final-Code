@@ -62,3 +62,6 @@ export const cacheMiddleware = (duration = 300) => {
     }
   };
 };
+
+// ADD THIS LINE: Export as default for compatibility with ES6 modules
+export default cacheMiddleware;

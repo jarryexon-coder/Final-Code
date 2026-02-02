@@ -2,6 +2,16 @@
 import express from 'express';
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "stub API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Central stub endpoints for quick deployment
 router.get('/nba/gameSummary', (req, res) => {
   res.json({

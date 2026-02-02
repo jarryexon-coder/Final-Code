@@ -3,6 +3,16 @@ import PremiumFeaturesService from '../services/PremiumFeaturesService.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "premium API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // GET: Check feature access
 router.get('/check-access', async (req, res) => {
   try {

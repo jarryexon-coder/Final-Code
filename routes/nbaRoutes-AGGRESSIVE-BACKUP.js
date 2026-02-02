@@ -1,5 +1,15 @@
 import express from 'express';
 const router = express.Router();
+
+// Root endpoint
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'nbaRoutes-AGGRESSIVE-BACKUP API',
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
 import enhancedNBAService from '../services/enhancedNBAService.js';
 import cacheMiddleware from '../middleware/cacheMiddleware.js';
 import { sportsScheduler } from '../services/sports-scheduler.js';

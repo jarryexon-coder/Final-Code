@@ -8,6 +8,16 @@ import firebaseAnalyticsService from '../services/firebaseAnalyticsService.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "revenuecat API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // ====================
 // REVENUECAT WEBHOOK ENDPOINT (Updated with Bearer Authorization)
 // ====================

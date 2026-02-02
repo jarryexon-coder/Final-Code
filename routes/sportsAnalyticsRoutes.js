@@ -3,6 +3,16 @@ import SportsBettingAnalyticsService from '../services/SportsBettingAnalyticsSer
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "sportsAnalytics API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 /**
  * @swagger
  * /api/sports-analytics/arbitrage:

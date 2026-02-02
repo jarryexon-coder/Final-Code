@@ -1,5 +1,15 @@
 import express from 'express';
 const router = express.Router();
+
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "secretPhrase API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
 import axios from 'axios';
 import SecretPhraseAnalytics from '../models/SecretPhraseAnalytics.js';
 import User from '../models/User.js';

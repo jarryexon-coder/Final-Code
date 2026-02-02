@@ -5,6 +5,16 @@ import Player from '../models/Player.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "prizepicksGeneration API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Authentication middleware
 const authenticate = async (req, res, next) => {
   try {

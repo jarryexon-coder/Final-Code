@@ -1,6 +1,16 @@
 import express from 'express';
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "influencer API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Health endpoint
 router.get('/health', (req, res) => {
   res.json({

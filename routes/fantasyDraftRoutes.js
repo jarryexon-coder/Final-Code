@@ -8,6 +8,16 @@ import axios from 'axios';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "fantasyDraft API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Rate limiting for draft endpoints
 const draftLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes

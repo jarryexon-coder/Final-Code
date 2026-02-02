@@ -1,6 +1,16 @@
 import express from 'express';
 import axios from 'axios';
 const router = express.Router();
+
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "influencerComplex API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
 import pool from '../config/database.js';
 import cacheMiddleware from '../middleware/cacheMiddleware.js';
 

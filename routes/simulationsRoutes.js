@@ -7,6 +7,16 @@ import User from '../models/User.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "simulations API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 /**
  * @swagger
  * tags:

@@ -3,6 +3,16 @@ import DraftStrategyService from '../services/DraftStrategyService.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "draft API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // GET: Snake draft anchor strategy
 router.get('/snake/anchor', async (req, res) => {
   try {

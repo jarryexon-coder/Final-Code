@@ -1,6 +1,16 @@
 import express from 'express';
 const router = express.Router();
 
+// Root endpoint
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'authRoutes-test API',
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Simple test endpoints
 router.get('/register', (req, res) => {
   res.json({ test: 'GET /api/auth/register works!' });

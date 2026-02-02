@@ -4,6 +4,16 @@ import { cacheMiddleware } from '../middleware/cache.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "search API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Global search across all collections - Cache for 120 seconds (2 minutes)
 router.post('/global', cacheMiddleware(120), async (req, res) => {
   try {

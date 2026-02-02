@@ -4,6 +4,16 @@ import Player from '../models/Player.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "leagues API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // GET /api/leagues/:sport/standings - Get league standings
 router.get('/:sport/standings', async (req, res) => {
   try {

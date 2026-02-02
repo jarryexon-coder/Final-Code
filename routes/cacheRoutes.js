@@ -4,6 +4,16 @@ import redisClient from '../redisClient.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "cache API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 /**
  * @swagger
  * /api/cache/stats:

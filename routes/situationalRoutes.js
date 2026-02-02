@@ -3,6 +3,16 @@ import SituationalAnalysisService from '../services/SituationalAnalysisService.j
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "situational API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 /**
  * @swagger
  * /api/situational/spot-plays:

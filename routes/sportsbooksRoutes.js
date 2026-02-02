@@ -4,6 +4,20 @@ import jwt from 'jsonwebtoken';
 
 const router = express.Router();
 
+// In your sportsbooksRoutes.js, add this at the top:
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Sportsbooks API is working',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      root: '/api/sportsbooks',
+      odds: '/api/sportsbooks/odds',
+      lines: '/api/sportsbooks/lines'
+    }
+  });
+});
+
 // Mock sportsbook data (in production, integrate with real APIs)
 const MOCK_SPORTSBOOKS = {
   draftkings: {

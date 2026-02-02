@@ -1,5 +1,15 @@
 import express from 'express';
 const router = express.Router();
+
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "influencer-complex API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
 import pool from '../config/database.js';
 
 // Public influencer directory

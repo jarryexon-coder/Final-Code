@@ -4,6 +4,16 @@ import Stat from '../models/Stat.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "stats API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Stat categories for each sport
 const statCategories = {
   NBA: {

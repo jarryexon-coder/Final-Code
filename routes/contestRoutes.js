@@ -3,6 +3,16 @@ import ContestOptimizer from '../services/ContestOptimizer.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "contest API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // GET: GPP leverage plays
 router.get('/gpp/leverage', async (req, res) => {
   try {

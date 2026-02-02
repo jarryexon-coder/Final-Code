@@ -5,6 +5,19 @@ import axios from 'axios';
 
 const router = express.Router();
 
+// Root endpoint
+router.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'prediction API is working',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      root: '/api/prediction',
+      health: '/api/prediction/health'
+    }
+  });
+});
+
 // ====================
 // EXTERNAL PREDICTION API INTEGRATION
 // ====================

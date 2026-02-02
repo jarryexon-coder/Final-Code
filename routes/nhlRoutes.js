@@ -3,6 +3,16 @@ import express from 'express';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "nhl API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // NHL Games endpoint
 router.get('/games', async (req, res) => {
   try {

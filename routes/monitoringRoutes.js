@@ -7,6 +7,16 @@ const execAsync = promisify(exec);
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "monitoring API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Admin-only monitoring endpoints
 router.get('/metrics', async (req, res) => {
   // Authentication check

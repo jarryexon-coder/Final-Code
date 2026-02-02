@@ -1,3 +1,16 @@
+import express from 'express';
+const router = express.Router();
+
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: 'index API',
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // routes/indexRoutes.js
 import fs from 'fs';
 import path from 'path';

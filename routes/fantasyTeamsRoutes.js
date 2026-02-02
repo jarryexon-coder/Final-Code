@@ -1,5 +1,15 @@
 import express from 'express';
 const router = express.Router();
+
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "fantasyTeams API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
 import FantasyTeam from '../models/FantasyTeam.js';
 // import authenticateToken from '../middleware/auth.js'; // Uncomment when auth is ready
 import cacheMiddleware from '../middleware/cacheMiddleware.js';

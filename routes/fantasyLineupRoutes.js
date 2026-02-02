@@ -7,6 +7,16 @@ import FantasyLineup from '../models/FantasyLineup.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "fantasyLineup API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Rate limiting
 const lineupLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes

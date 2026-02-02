@@ -6,6 +6,16 @@ import User from '../models/User.js';
 
 const router = express.Router();
 
+// Root endpoint
+router.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "prizepicksLimits API",
+    timestamp: new Date().toISOString(),
+    endpoints: []
+  });
+});
+
 // Authentication middleware
 const authenticate = async (req, res, next) => {
   try {
