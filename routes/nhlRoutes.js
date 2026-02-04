@@ -5,7 +5,10 @@ const router = express.Router();
 
 // Root endpoint
 router.get("/", (req, res) => {
-  res.json({
+    success: true,
+  standings: allTeamsArray,  // ← THIS SHOULD BE AN ARRAY
+  lastUpdated: new Date().toISOString()
+});res.json({
     success: true,
     message: "nhl API",
     timestamp: new Date().toISOString(),
@@ -69,189 +72,93 @@ router.get('/games', async (req, res) => {
   }
 });
 
-// NHL Standings endpoint (from your code)
+// NHL Standings endpoint - RETURNS ARRAY, NOT OBJECT
 router.get('/standings', async (req, res) => {
-  console.log('🎯 /api/nhl/standings called');
-  
-  const standings = [
-    {
-      conference: 'Eastern',
-      division: 'Atlantic',
-      teams: [
-        { 
-          teamAbbrev: 'FLA',
-          teamName: 'Florida Panthers',
-          gamesPlayed: 65,
-          wins: 45,
-          losses: 17,
-          otLosses: 3,
-          points: 93,
-          pointsPercentage: 0.715,
-          streak: 'W5',
-          rank: 1
+  try {
+    console.log('🏒 Fetching NHL standings...');
+    
+    // Your existing data (as object)
+    const standingsData = {
+      eastern: [
+        {
+          division: "Atlantic",
+          teams: [
+            { rank: 1, team: "Boston Bruins", wins: 42, losses: 18, ot: 7, points: 91, row: 38 },
+            { rank: 2, team: "Florida Panthers", wins: 41, losses: 20, ot: 6, points: 88, row: 37 }
+          ]
         },
-        { 
-          teamAbbrev: 'BOS',
-          teamName: 'Boston Bruins',
-          gamesPlayed: 66,
-          wins: 38,
-          losses: 14,
-          otLosses: 14,
-          points: 90,
-          pointsPercentage: 0.682,
-          streak: 'W2',
-          rank: 2
+        {
+          division: "Metropolitan",
+          teams: [
+            { rank: 1, team: "New York Rangers", wins: 44, losses: 18, ot: 4, points: 92, row: 40 },
+            { rank: 2, team: "Carolina Hurricanes", wins: 39, losses: 20, ot: 6, points: 84, row: 36 }
+          ]
+        }
+      ],
+      western: [
+        {
+          division: "Central",
+          teams: [
+            { rank: 1, team: "Colorado Avalanche", wins: 42, losses: 20, ot: 5, points: 89, row: 39 },
+            { rank: 2, team: "Winnipeg Jets", wins: 41, losses: 19, ot: 6, points: 88, row: 37 }
+          ]
         },
-        { 
-          teamAbbrev: 'TOR',
-          teamName: 'Toronto Maple Leafs',
-          gamesPlayed: 64,
-          wins: 37,
-          losses: 19,
-          otLosses: 8,
-          points: 82,
-          pointsPercentage: 0.641,
-          streak: 'W1',
-          rank: 3
+        {
+          division: "Pacific",
+          teams: [
+            { rank: 1, team: "Vancouver Canucks", wins: 42, losses: 18, ot: 7, points: 91, row: 38 },
+            { rank: 2, team: "Edmonton Oilers", wins: 38, losses: 21, ot: 2, points: 78, row: 34 }
+          ]
         }
       ]
-    },
-    {
-      conference: 'Eastern',
-      division: 'Metropolitan',
-      teams: [
-        { 
-          teamAbbrev: 'NYR',
-          teamName: 'New York Rangers',
-          gamesPlayed: 65,
-          wins: 42,
-          losses: 18,
-          otLosses: 5,
-          points: 89,
-          pointsPercentage: 0.685,
-          streak: 'W2',
-          rank: 1
-        },
-        { 
-          teamAbbrev: 'CAR',
-          teamName: 'Carolina Hurricanes',
-          gamesPlayed: 64,
-          wins: 39,
-          losses: 20,
-          otLosses: 5,
-          points: 83,
-          pointsPercentage: 0.648,
-          streak: 'W1',
-          rank: 2
-        },
-        { 
-          teamAbbrev: 'PHI',
-          teamName: 'Philadelphia Flyers',
-          gamesPlayed: 66,
-          wins: 33,
-          losses: 25,
-          otLosses: 8,
-          points: 74,
-          pointsPercentage: 0.561,
-          streak: 'L1',
-          rank: 3
+    };
+    
+    // CONVERT OBJECT TO ARRAY
+    const allTeams = [];
+    
+    // Process Eastern divisions
+    if (standingsData.eastern && Array.isArray(standingsData.eastern)) {
+      standingsData.eastern.forEach(division => {
+        if (division.teams && Array.isArray(division.teams)) {
+          allTeams.push(...division.teams.map(team => ({
+            ...team,
+            conference: 'Eastern',
+            division: division.division
+          })));
         }
-      ]
-    },
-    {
-      conference: 'Western',
-      division: 'Central',
-      teams: [
-        { 
-          teamAbbrev: 'DAL',
-          teamName: 'Dallas Stars',
-          gamesPlayed: 67,
-          wins: 41,
-          losses: 19,
-          otLosses: 7,
-          points: 89,
-          pointsPercentage: 0.664,
-          streak: 'L1',
-          rank: 1
-        },
-        { 
-          teamAbbrev: 'COL',
-          teamName: 'Colorado Avalanche',
-          gamesPlayed: 66,
-          wins: 41,
-          losses: 21,
-          otLosses: 4,
-          points: 86,
-          pointsPercentage: 0.652,
-          streak: 'W3',
-          rank: 2
-        },
-        { 
-          teamAbbrev: 'WPG',
-          teamName: 'Winnipeg Jets',
-          gamesPlayed: 64,
-          wins: 40,
-          losses: 19,
-          otLosses: 5,
-          points: 85,
-          pointsPercentage: 0.664,
-          streak: 'L2',
-          rank: 3
-        }
-      ]
-    },
-    {
-      conference: 'Western',
-      division: 'Pacific',
-      teams: [
-        { 
-          teamAbbrev: 'VAN',
-          teamName: 'Vancouver Canucks',
-          gamesPlayed: 67,
-          wins: 42,
-          losses: 18,
-          otLosses: 7,
-          points: 91,
-          pointsPercentage: 0.679,
-          streak: 'W1',
-          rank: 1
-        },
-        { 
-          teamAbbrev: 'EDM',
-          teamName: 'Edmonton Oilers',
-          gamesPlayed: 65,
-          wins: 41,
-          losses: 21,
-          otLosses: 3,
-          points: 85,
-          pointsPercentage: 0.654,
-          streak: 'W2',
-          rank: 2
-        },
-        { 
-          teamAbbrev: 'LAK',
-          teamName: 'Los Angeles Kings',
-          gamesPlayed: 65,
-          wins: 34,
-          losses: 22,
-          otLosses: 9,
-          points: 77,
-          pointsPercentage: 0.592,
-          streak: 'L1',
-          rank: 3
-        }
-      ]
+      });
     }
-  ];
-  
-  res.json({
-    success: true,
-    data: standings,
-    count: standings.length,
-    timestamp: new Date().toISOString(),
-    season: '2023-2024',
-    lastUpdated: new Date().toISOString()
-  });
+    
+    // Process Western divisions
+    if (standingsData.western && Array.isArray(standingsData.western)) {
+      standingsData.western.forEach(division => {
+        if (division.teams && Array.isArray(division.teams)) {
+          allTeams.push(...division.teams.map(team => ({
+            ...team,
+            conference: 'Western',
+            division: division.division
+          })));
+        }
+      });
+    }
+    
+    res.json({
+      success: true,
+      standings: allTeams,  // ← NOW RETURNS ARRAY
+      lastUpdated: new Date().toISOString(),
+      season: "2024-2025",
+      gamesPlayed: 67,
+      totalTeams: allTeams.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching NHL standings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch NHL standings',
+      error: error.message
+    });
+  }
 });
 
 // NHL Stats endpoint

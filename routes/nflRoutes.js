@@ -3,7 +3,10 @@ const router = express.Router();
 
 // Root endpoint
 router.get("/", (req, res) => {
-  res.json({
+    success: true,
+standings: allTeamsArray,  // ← THIS SHOULD BE AN ARRAY
+  lastUpdated: new Date().toISOString()  
+});res.json({
     success: true,
     message: "nfl API",
     timestamp: new Date().toISOString(),
@@ -15,6 +18,127 @@ import axios from 'axios';
 // Use API keys from environment
 const NFL_API_KEY = process.env.NFL_API_KEY;
 const RAPIDAPI_KEY_PLAYER_PRO = process.env.RAPIDAPI_KEY_PLAYER_PROPS; // For detailed stats
+
+/**
+ * @swagger
+ * /api/nfl/standings:
+ *   get:
+ *     summary: Get NFL standings
+ *     description: Retrieve current NFL standings with team records, win percentages, and playoff seeds
+ *     tags: [NFL]
+ *     responses:
+ *       200:
+ *         description: NFL standings retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 standings:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/NFLStanding'
+ *                 lastUpdated:
+ *                   type: string
+ *                 season:
+ *                   type: string
+ *                 week:
+ *                   type: integer
+ *                 totalTeams:
+ *                   type: integer
+ *       500:
+ *         description: Server error
+ */
+// NFL Standings endpoint - RETURNS ARRAY, NOT OBJECT
+router.get('/standings', async (req, res) => {
+  try {
+    console.log('📊 Fetching NFL standings...');
+    
+    // Your existing data (as object)
+    const standingsData = {
+      afc: [
+        {
+          division: "AFC East",
+          teams: [
+            { rank: 1, team: "Buffalo Bills", wins: 11, losses: 6, pct: 0.647, pf: 451, pa: 371 },
+            { rank: 2, team: "Miami Dolphins", wins: 10, losses: 7, pct: 0.588, pf: 391, pa: 496 }
+          ]
+        },
+        {
+          division: "AFC North", 
+          teams: [
+            { rank: 1, team: "Baltimore Ravens", wins: 13, losses: 4, pct: 0.765, pf: 483, pa: 280 },
+            { rank: 2, team: "Cleveland Browns", wins: 11, losses: 6, pct: 0.647, pf: 396, pa: 362 }
+          ]
+        }
+      ],
+      nfc: [
+        {
+          division: "NFC East",
+          teams: [
+            { rank: 1, team: "Dallas Cowboys", wins: 12, losses: 5, pct: 0.706, pf: 509, pa: 315 },
+            { rank: 2, team: "Philadelphia Eagles", wins: 11, losses: 6, pct: 0.647, pf: 433, pa: 428 }
+          ]
+        },
+        {
+          division: "NFC West",
+          teams: [
+            { rank: 1, team: "San Francisco 49ers", wins: 12, losses: 5, pct: 0.706, pf: 491, pa: 298 },
+            { rank: 2, team: "Los Angeles Rams", wins: 10, losses: 7, pct: 0.588, pf: 404, pa: 377 }
+          ]
+        }
+      ]
+    };
+    
+    // CONVERT OBJECT TO ARRAY
+    const allTeams = [];
+    
+    // Process AFC divisions
+    if (standingsData.afc && Array.isArray(standingsData.afc)) {
+      standingsData.afc.forEach(division => {
+        if (division.teams && Array.isArray(division.teams)) {
+          allTeams.push(...division.teams.map(team => ({
+            ...team,
+            conference: 'AFC',
+            division: division.division
+          })));
+        }
+      });
+    }
+    
+    // Process NFC divisions  
+    if (standingsData.nfc && Array.isArray(standingsData.nfc)) {
+      standingsData.nfc.forEach(division => {
+        if (division.teams && Array.isArray(division.teams)) {
+          allTeams.push(...division.teams.map(team => ({
+            ...team,
+            conference: 'NFC',
+            division: division.division
+          })));
+        }
+      });
+    }
+    
+    res.json({
+      success: true,
+      standings: allTeams,  // ← NOW RETURNS ARRAY
+      lastUpdated: new Date().toISOString(),
+      season: "2024-2025",
+      week: 18,
+      totalTeams: allTeams.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching NFL standings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch NFL standings',
+      error: error.message
+    });
+  }
+});
 
 /**
  * @swagger
@@ -910,6 +1034,34 @@ router.get('/gameSummary', async (req, res) => {
  * @swagger
  * components:
  *   schemas:
+ *     NFLStanding:
+ *       type: object
+ *       properties:
+ *         team:
+ *           type: string
+ *         wins:
+ *           type: integer
+ *         losses:
+ *           type: integer
+ *         winPercentage:
+ *           type: number
+ *         pointsFor:
+ *           type: integer
+ *         pointsAgainst:
+ *           type: integer
+ *         conference:
+ *           type: string
+ *           enum: [AFC, NFC]
+ *         division:
+ *           type: string
+ *           enum: [North, South, East, West]
+ *         streak:
+ *           type: string
+ *         playoffSeed:
+ *           type: integer
+ *         rank:
+ *           type: integer
+ *     
  *     NFLGame:
  *       type: object
  *       properties:

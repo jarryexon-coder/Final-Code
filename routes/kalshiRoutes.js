@@ -8,7 +8,18 @@ router.get("/", (req, res) => {
     success: true,
     message: "kalshi API",
     timestamp: new Date().toISOString(),
-    endpoints: []
+    endpoints: [
+      "/health",
+      "/games",
+      "/games/:id",
+      "/players", 
+      "/teams",
+      "/stats",
+      "/markets",
+      "/news",
+      "/markets/:id",
+      "/nfl/games"  // Added new endpoint
+    ]
   });
 });
 
@@ -116,6 +127,255 @@ router.get('/games', async (req, res) => {
     count: games.length,
     timestamp: new Date().toISOString()
   });
+});
+
+/**
+ * @swagger
+ * /api/kalshi/nfl/games:
+ *   get:
+ *     summary: Get NFL games with scores and status
+ *     description: Returns NFL game data including live scores, status, and broadcast information (mock data - replace with real API later)
+ *     tags: [Kalshi]
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [scheduled, in_progress, final]
+ *         description: Filter games by status
+ *       - in: query
+ *         name: date
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Filter games by date (YYYY-MM-DD)
+ *       - in: header
+ *         name: KALSHI-ACCESS-KEY
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Kalshi API access key (optional for this endpoint)
+ *     responses:
+ *       200:
+ *         description: NFL games retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 games:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       awayTeam:
+ *                         type: string
+ *                       homeTeam:
+ *                         type: string
+ *                       awayScore:
+ *                         type: integer
+ *                       homeScore:
+ *                         type: integer
+ *                       status:
+ *                         type: string
+ *                         enum: [scheduled, in_progress, final]
+ *                       quarter:
+ *                         type: string
+ *                       timeRemaining:
+ *                         type: string
+ *                       stadium:
+ *                         type: string
+ *                       broadcast:
+ *                         type: string
+ *                       date:
+ *                         type: string
+ *                         format: date-time
+ *                 count:
+ *                   type: integer
+ *       500:
+ *         description: Server error
+ */
+router.get('/nfl/games', async (req, res) => {
+  try {
+    const { status, date } = req.query;
+    const apiKey = req.headers['kalshi-access-key'];
+    
+    console.log(`🏈 Fetching NFL games, status: ${status || 'all'}, date: ${date || 'all'}`);
+    
+    // TODO: Replace with real data source
+    const games = [
+      {
+        id: '1',
+        awayTeam: 'Kansas City Chiefs',
+        homeTeam: 'Baltimore Ravens',
+        awayScore: 24,
+        homeScore: 27,
+        status: 'final',
+        quarter: '4th',
+        timeRemaining: '0:00',
+        stadium: 'M&T Bank Stadium',
+        broadcast: 'CBS',
+        date: '2026-02-02T20:00:00Z',
+        spread: 2.5,
+        overUnder: 48.5,
+        awayTeamRecord: '12-5',
+        homeTeamRecord: '14-3',
+        attendance: 71000,
+        weather: 'Clear, 42°F'
+      },
+      {
+        id: '2',
+        awayTeam: 'San Francisco 49ers',
+        homeTeam: 'Detroit Lions',
+        awayScore: 34,
+        homeScore: 31,
+        status: 'final',
+        quarter: '4th',
+        timeRemaining: '0:00',
+        stadium: 'Ford Field',
+        broadcast: 'FOX',
+        date: '2026-02-01T20:00:00Z',
+        spread: -3.5,
+        overUnder: 51.5,
+        awayTeamRecord: '13-4',
+        homeTeamRecord: '12-5',
+        attendance: 65000,
+        weather: 'Indoor'
+      },
+      {
+        id: '3',
+        awayTeam: 'Buffalo Bills',
+        homeTeam: 'Miami Dolphins',
+        awayScore: 21,
+        homeScore: 14,
+        status: 'in_progress',
+        quarter: '3rd',
+        timeRemaining: '5:43',
+        stadium: 'Hard Rock Stadium',
+        broadcast: 'ESPN',
+        date: new Date().toISOString(),
+        spread: 1.5,
+        overUnder: 47.0,
+        awayTeamRecord: '11-6',
+        homeTeamRecord: '10-7',
+        attendance: 65500,
+        weather: 'Partly Cloudy, 68°F'
+      },
+      {
+        id: '4',
+        awayTeam: 'Dallas Cowboys',
+        homeTeam: 'Philadelphia Eagles',
+        awayScore: 0,
+        homeScore: 0,
+        status: 'scheduled',
+        quarter: '1st',
+        timeRemaining: '15:00',
+        stadium: 'Lincoln Financial Field',
+        broadcast: 'NBC',
+        date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        spread: -2.5,
+        overUnder: 49.0,
+        awayTeamRecord: '10-7',
+        homeTeamRecord: '11-6',
+        attendance: 69500,
+        weather: 'Rain, 45°F'
+      },
+      {
+        id: '5',
+        awayTeam: 'Green Bay Packers',
+        homeTeam: 'Chicago Bears',
+        awayScore: 0,
+        homeScore: 0,
+        status: 'scheduled',
+        quarter: '1st',
+        timeRemaining: '15:00',
+        stadium: 'Soldier Field',
+        broadcast: 'FOX',
+        date: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+        spread: -6.5,
+        overUnder: 44.5,
+        awayTeamRecord: '9-8',
+        homeTeamRecord: '7-10',
+        attendance: 61500,
+        weather: 'Cold, 28°F'
+      },
+      {
+        id: '6',
+        awayTeam: 'Los Angeles Rams',
+        homeTeam: 'Seattle Seahawks',
+        awayScore: 28,
+        homeScore: 24,
+        status: 'final',
+        quarter: '4th',
+        timeRemaining: '0:00',
+        stadium: 'Lumen Field',
+        broadcast: 'CBS',
+        date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+        spread: 3.5,
+        overUnder: 46.0,
+        awayTeamRecord: '10-7',
+        homeTeamRecord: '9-8',
+        attendance: 68500,
+        weather: 'Rain, 52°F'
+      }
+    ];
+
+    // Filter by status if provided
+    let filteredGames = games;
+    if (status) {
+      filteredGames = games.filter(game => game.status === status);
+    }
+    
+    // Filter by date if provided
+    if (date) {
+      const filterDate = new Date(date).toISOString().split('T')[0];
+      filteredGames = filteredGames.filter(game => {
+        const gameDate = new Date(game.date).toISOString().split('T')[0];
+        return gameDate === filterDate;
+      });
+    }
+
+    // Add Kalshi market data if API key is provided
+    if (apiKey) {
+      filteredGames = filteredGames.map(game => ({
+        ...game,
+        kalshiMarket: {
+          marketId: `nfl_${game.id}`,
+          yesPrice: (Math.random() * 0.5 + 0.4).toFixed(2),
+          noPrice: (Math.random() * 0.5 + 0.4).toFixed(2),
+          volume: Math.floor(Math.random() * 1000000),
+          openInterest: Math.floor(Math.random() * 500000)
+        }
+      }));
+    }
+
+    res.json({
+      success: true,
+      message: 'NFL games',
+      timestamp: new Date().toISOString(),
+      games: filteredGames,
+      count: filteredGames.length,
+      hasKalshiData: !!apiKey,
+      note: apiKey ? 'Includes Kalshi market data' : 'Basic game data only'
+    });
+
+  } catch (error) {
+    console.error('Error fetching NFL games:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch NFL games',
+      message: error.message
+    });
+  }
 });
 
 /**
