@@ -1,4 +1,4 @@
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
 // GET /api/news - Returns sports news articles
@@ -85,5 +85,4 @@ router.get('/', async (req, res) => {
   }
 });
 
-module.exports = router;
-
+export default router;

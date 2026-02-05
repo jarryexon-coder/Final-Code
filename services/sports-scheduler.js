@@ -44,15 +44,16 @@ const API_CONFIG = {
     description: 'Predictions: Every 20 seconds (24/7)'
   },
 
-  // Ball Don't Lie API
-  balldontlie: {
-    hostname: 'api.balldontlie.io',
-    path: '/v1/',
-    apiKey: process.env.BALLDONTLIE_API_KEY,
-    endpoints: ['games', 'players', 'stats'],
-    cacheKey: 'balldontlie',
-    rateLimit: 60,
-    description: 'Ball Don\'t Lie: 60 requests/minute (24/7)'
+  // NBA Data API
+  nbaData: {
+    hostname: 'data.nba.net',
+    endpoints: [
+      '/data/10s/prod/v1/today.json',
+      '/data/10s/prod/v1/2024/teams.json',
+      '/data/10s/prod/v1/2024/players.json'
+    ],
+    cacheKey: 'nba_data',
+    description: 'NBA Data API: Daily updates'
   },
 
   // The Odds API
@@ -67,10 +68,9 @@ const API_CONFIG = {
 
 class SportsApiScheduler {
   constructor() {
-    this.balldontlieRequests = 0;
-    this.balldontlieResetTime = Date.now();
-    this.balldontlieInterval = null;
-    this.balldontlieResetInterval = null;
+    this.nbaDataRequests = 0;
+    this.nbaDataResetTime = Date.now();
+    this.nbaDataInterval = null;
     this.activeIntervals = new Set();
     this.isDelayed = process.env.DISABLE_SCHEDULER === 'true';
     
@@ -92,7 +92,6 @@ class SportsApiScheduler {
 
   validateEnvironmentVariables() {
     const requiredVars = [
-      'BALLDONTLIE_API_KEY',
       'THE_ODDS_API_KEY',
       'RAPIDAPI_KEY_PLAYER_PROPS', 
       'RAPIDAPI_KEY_PREDICTIONS'
@@ -116,15 +115,11 @@ class SportsApiScheduler {
     return new Promise((resolve, reject) => {
       const options = {
         hostname: config.hostname,
-        path: endpoint ? config.path + endpoint : config.path,
+        path: endpoint ? endpoint : config.path,
         method: 'GET',
         headers: config.headers || {},
         timeout: 10000
       };
-
-      if (config.apiKey && !config.headers) {
-        options.headers['Authorization'] = config.apiKey;
-      }
 
       console.log(`🔄 [${new Date().toLocaleTimeString('en-US', {timeZone: 'America/New_York'})} ET] Fetching: ${config.description}`);
 
@@ -141,7 +136,7 @@ class SportsApiScheduler {
               const parsedData = JSON.parse(data);
               
               if (config.cacheKey) {
-                const cacheKey = endpoint ? `${config.cacheKey}_${endpoint}` : config.cacheKey;
+                const cacheKey = endpoint ? `${config.cacheKey}_${endpoint.replace(/\//g, '_')}` : config.cacheKey;
                 apiCache.set(cacheKey, {
                   data: parsedData,
                   lastUpdated: new Date().toISOString(),
@@ -177,25 +172,14 @@ class SportsApiScheduler {
     });
   }
 
-  // FIXED METHOD: This was missing
-  async balldontlieRequestHandler() {
-    if (this.balldontlieRequests < API_CONFIG.balldontlie.rateLimit) {
-      const endpoint = this.getRandomEndpoint(API_CONFIG.balldontlie.endpoints);
-      try {
-        await this.makeAPIRequest(API_CONFIG.balldontlie, endpoint);
-        this.balldontlieRequests++;
-      } catch (error) {
-        if (error.message && error.message.includes('429')) {
-          console.log('⏸️  Rate limit hit, pausing for 5 seconds...');
-          clearInterval(this.balldontlieInterval);
-          setTimeout(() => {
-            const self = this;
-            this.balldontlieInterval = setInterval(() => self.balldontlieRequestHandler(), 1000);
-          }, 5000);
-        }
-      }
-    } else {
-      console.log(`⏸️  Rate limit reached (${this.balldontlieRequests}/${API_CONFIG.balldontlie.rateLimit}), waiting for reset...`);
+  // NBA Data API Request Handler
+  async nbaDataRequestHandler() {
+    try {
+      const endpoint = this.getRandomEndpoint(API_CONFIG.nbaData.endpoints);
+      await this.makeAPIRequest(API_CONFIG.nbaData, endpoint);
+      this.nbaDataRequests++;
+    } catch (error) {
+      console.error('❌ NBA Data API request failed:', error.message);
     }
   }
 
@@ -223,22 +207,28 @@ class SportsApiScheduler {
     });
   }
 
-  setupBalldontlieScheduler() {
-    // Reset counter every minute
-    this.balldontlieResetInterval = setInterval(() => {
-      this.balldontlieRequests = 0;
-      this.balldontlieResetTime = Date.now();
-      console.log(`🔄 Ball Don't Lie rate limit reset. Requests: ${this.balldontlieRequests}`);
-    }, 60000);
+  setupNbaDataScheduler() {
+    // Schedule NBA Data API to run daily at 9 AM ET
+    cron.schedule('0 9 * * *', async () => {
+      try {
+        // Fetch multiple NBA data endpoints
+        for (const endpoint of API_CONFIG.nbaData.endpoints) {
+          try {
+            await this.makeAPIRequest(API_CONFIG.nbaData, endpoint);
+            // Add a small delay between requests
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } catch (error) {
+            console.error(`❌ Failed to fetch NBA data endpoint ${endpoint}:`, error.message);
+          }
+        }
+      } catch (error) {
+        console.error('❌ NBA Data scheduler error:', error.message);
+      }
+    }, {
+      timezone: "America/New_York"
+    });
 
-    this.activeIntervals.add(this.balldontlieResetInterval);
-
-    // Start the request handler
-    this.balldontlieInterval = setInterval(() => {
-      this.balldontlieRequestHandler();
-    }, 1000);
-
-    this.activeIntervals.add(this.balldontlieInterval);
+    console.log('📅 NBA Data API scheduled for daily update at 9:00 AM ET');
   }
 
   setupOddsScheduler() {
@@ -271,7 +261,7 @@ class SportsApiScheduler {
   }
 
   getCachedData(apiName, endpoint = '') {
-    const cacheKey = endpoint ? `${apiName}_${endpoint}` : apiName;
+    const cacheKey = endpoint ? `${apiName}_${endpoint.replace(/\//g, '_')}` : apiName;
     return apiCache.get(cacheKey);
   }
 
@@ -282,11 +272,9 @@ class SportsApiScheduler {
     return {
       currentTimeET: etTime,
       schedulerStatus: this.isDelayed ? 'Delayed startup (3 minutes)' : 'Running normally',
-      balldontlie: {
-        requestsThisMinute: this.balldontlieRequests,
-        rateLimit: API_CONFIG.balldontlie.rateLimit,
-        resetIn: Math.max(0, 60000 - (Date.now() - this.balldontlieResetTime)),
-        resetTime: new Date(this.balldontlieResetTime + 60000).toLocaleTimeString('en-US', {timeZone: 'America/New_York'})
+      nbaData: {
+        requestsToday: this.nbaDataRequests,
+        lastReset: new Date(this.nbaDataResetTime).toLocaleTimeString('en-US', {timeZone: 'America/New_York'})
       },
       schedules: Object.values(API_CONFIG).map(config => ({
         service: config.cacheKey,
@@ -308,21 +296,16 @@ class SportsApiScheduler {
   setupSchedulers() {
     this.setupPlayerPropsScheduler();
     this.setupPredictionsScheduler();
-    this.setupBalldontlieScheduler();
+    this.setupNbaDataScheduler();
     this.setupOddsScheduler();
   }
 
   cleanup() {
     console.log('🧹 Cleaning up scheduler intervals...');
     
-    if (this.balldontlieInterval) {
-      clearInterval(this.balldontlieInterval);
-      console.log('✅ Cleared Ball Don\'t Lie interval');
-    }
-    
-    if (this.balldontlieResetInterval) {
-      clearInterval(this.balldontlieResetInterval);
-      console.log('✅ Cleared Ball Don\'t Lie reset interval');
+    if (this.nbaDataInterval) {
+      clearInterval(this.nbaDataInterval);
+      console.log('✅ Cleared NBA Data interval');
     }
     
     this.activeIntervals.forEach(intervalId => {
@@ -348,9 +331,9 @@ function createSportsRoutes(scheduler) {
     res.json(data || { message: 'No data available yet' });
   });
 
-  router.get('/balldontlie/:endpoint?', (req, res) => {
-    const endpoint = req.params.endpoint || 'games';
-    const data = scheduler.getCachedData('balldontlie', endpoint);
+  router.get('/nba-data/:endpoint?', (req, res) => {
+    const endpoint = req.params.endpoint || 'today';
+    const data = scheduler.getCachedData('nba_data', endpoint);
     res.json(data || { message: 'No data available yet' });
   });
 

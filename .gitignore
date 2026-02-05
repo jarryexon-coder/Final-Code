@@ -73,3 +73,7 @@ config/*.key
 Thumbs.db
 ehthumbs.db
 Desktop.ini
+*.mjs
+test-*
+debug-*
+test_*.py

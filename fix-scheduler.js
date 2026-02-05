@@ -10,8 +10,7 @@ console.log('Line 213:', lines[212]);
 
 // Simple fix: Comment out the problematic line temporarily
 content = content.replace(
-  'this.balldontlieInterval = setInterval(this.balldontlieRequestHandler.bind(this), 1000);',
-  '// Temporarily disabled: this.balldontlieInterval = setInterval(this.balldontlieRequestHandler.bind(this), 1000);'
+  'this.nbaDataInterval = setInterval(this.nbaDataRequestHandler.bind(this), 5000);
 );
 
 fs.writeFileSync(filePath, content);

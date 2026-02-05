@@ -9,13 +9,15 @@ const cache = new Map();
 
 // NBA API Configuration
 const NBA_API_CONFIG = {
-  baseURL: 'https://api.sportsdata.io/v3/nba',
-  apiKey: process.env.SPORTSDATA_API_KEY || 'your-api-key-here',
+  // Updated base URL to NBA Data API
+  baseURL: 'http://data.nba.net/data/10s/prod/v1',
+  currentYear: new Date().getFullYear(),
   endpoints: {
-    games: '/scores/json/GamesByDate/{date}',
-    players: '/scores/json/Players',
-    teams: '/scores/json/teams',
-    standings: '/scores/json/Standings/{season}'
+    teams: '/{year}/teams.json',
+    players: '/{year}/players.json',
+    gamesByDate: '/{date}/scoreboard.json',
+    schedule: '/{year}/schedule.json',
+    standings: '/{year}/standings.json'
   }
 };
 
@@ -116,23 +118,32 @@ router.get('/games', async (req, res) => {
     // Try to fetch real data first
     const today = new Date().toISOString().split('T')[0];
     
-    if (NBA_API_CONFIG.apiKey && NBA_API_CONFIG.apiKey !== 'your-api-key-here') {
-      const response = await axios.get(
-        `${NBA_API_CONFIG.baseURL}/scores/json/GamesByDate/${today}`,
-        {
-          headers: { 'Ocp-Apim-Subscription-Key': NBA_API_CONFIG.apiKey }
-        }
-      );
-      
+    // Using NBA Data API for games by date
+    const response = await axios.get(
+      `http://data.nba.net/data/10s/prod/v1/${today}/scoreboard.json`
+    );
+    
+    if (response.data && response.data.games) {
       return res.json({
         success: true,
-        source: 'sportsdata.io',
-        count: response.data.length,
-        games: response.data,
+        source: 'nba.net',
+        count: response.data.games.length,
+        games: response.data.games.map(game => ({
+          id: game.gameId,
+          homeTeam: game.hTeam.teamName || game.hTeam.triCode,
+          awayTeam: game.vTeam.teamName || game.vTeam.triCode,
+          date: today,
+          status: game.statusNum === 1 ? 'Scheduled' : 
+                  game.statusNum === 2 ? 'InProgress' : 'Final',
+          homeScore: game.hTeam.score,
+          awayScore: game.vTeam.score,
+          period: game.period.current,
+          time: game.clock || game.startTimeEastern
+        })),
         timestamp: new Date().toISOString()
       });
     } else {
-      // Return mock data if API key not configured
+      // Return mock data if API returns empty
       return res.json({
         success: true,
         message: 'NBA games endpoint is working',
@@ -155,15 +166,7 @@ router.get('/games', async (req, res) => {
             time: '8:00 PM ET',
             status: 'Scheduled'
           }
-        ],
-        endpoints: {
-          root: '/api/nba',
-          games: '/api/nba/games',
-          teams: '/api/nba/teams',
-          stats: '/api/nba/stats',
-          live_scores: '/api/nba/scores/live',
-          player_stats: '/api/nba/players/stats'
-        }
+        ]
       });
     }
   } catch (error) {
@@ -185,15 +188,8 @@ router.get('/games', async (req, res) => {
  * /api/nba/teams:
  *   get:
  *     summary: Get NBA teams
- *     description: Retrieve NBA teams data using BALLDONTLIE_API_KEY
+ *     description: Retrieve NBA teams data using NBA Data API
  *     tags: [NBA]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 0
- *         description: Page number for pagination
  *     responses:
  *       200:
  *         description: List of NBA teams
@@ -215,24 +211,31 @@ router.get('/games', async (req, res) => {
  */
 router.get('/teams', async (req, res) => {
   try {
-    const { page = 0 } = req.query;
+    const year = NBA_API_CONFIG.currentYear;
     
-    if (process.env.BALLDONTLIE_API_KEY) {
-      const response = await axios.get('https://api.balldontlie.io/v1/teams', {
-        params: { page },
-        headers: {
-          'Authorization': process.env.BALLDONTLIE_API_KEY
-        }
-      });
+    const response = await axios.get(
+      `http://data.nba.net/data/10s/prod/v1/${year}/teams.json`
+    );
+    
+    if (response.data && response.data.league && response.data.league.standard) {
+      const teams = response.data.league.standard.filter(team => team.isNBAFranchise);
       
       return res.json({
         success: true,
-        count: response.data.data.length,
-        teams: response.data.data,
-        meta: response.data.meta
+        count: teams.length,
+        teams: teams.map(team => ({
+          id: team.teamId,
+          full_name: team.fullName,
+          abbreviation: team.tricode,
+          city: team.city,
+          conference: team.confName,
+          division: team.divName,
+          logo: `https://cdn.nba.com/logos/nba/${team.teamId}/primary/L/logo.svg`
+        })),
+        source: 'nba.net'
       });
     } else {
-      // Mock response if API key not available
+      // Mock response if API data structure is unexpected
       const mockTeams = [
         { id: 1, full_name: 'Los Angeles Lakers', abbreviation: 'LAL', city: 'Los Angeles', conference: 'West' },
         { id: 2, full_name: 'Golden State Warriors', abbreviation: 'GSW', city: 'San Francisco', conference: 'West' },
@@ -272,7 +275,7 @@ router.get('/teams', async (req, res) => {
  * /api/nba/stats:
  *   get:
  *     summary: Get NBA statistics
- *     description: Retrieve NBA statistics using BALLDONTLIE_API_KEY
+ *     description: Retrieve NBA statistics using NBA Data API
  *     tags: [NBA]
  *     parameters:
  *       - in: query
@@ -282,18 +285,11 @@ router.get('/teams', async (req, res) => {
  *           default: 2024
  *         description: NBA season year
  *       - in: query
- *         name: player_ids
+ *         name: gameDate
  *         schema:
- *           type: array
- *           items:
- *             type: integer
- *         description: Filter by player IDs
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 0
- *         description: Page number for pagination
+ *           type: string
+ *           format: date
+ *         description: Filter by game date (YYYY-MM-DD)
  *     responses:
  *       200:
  *         description: NBA statistics data
@@ -315,30 +311,42 @@ router.get('/teams', async (req, res) => {
  */
 router.get('/stats', async (req, res) => {
   try {
-    const { season = 2024, player_ids, page = 0 } = req.query;
+    const { season = 2024, gameDate } = req.query;
     
-    if (process.env.BALLDONTLIE_API_KEY) {
-      const params = new URLSearchParams();
-      params.append('season', season);
-      params.append('page', page);
-      
-      if (player_ids) {
-        const ids = Array.isArray(player_ids) ? player_ids : [player_ids];
-        ids.forEach(id => params.append('player_ids[]', id));
-      }
-      
-      const response = await axios.get('https://api.balldontlie.io/v1/stats', {
-        params,
-        headers: {
-          'Authorization': process.env.BALLDONTLIE_API_KEY
-        }
-      });
+    // For the stats endpoint, we'll use the scoreboard data which includes game stats
+    const date = gameDate || new Date().toISOString().split('T')[0];
+    
+    const response = await axios.get(
+      `http://data.nba.net/data/10s/prod/v1/${date}/scoreboard.json`
+    );
+    
+    if (response.data && response.data.games) {
+      // Extract stats from games
+      const gameStats = response.data.games.map(game => ({
+        gameId: game.gameId,
+        homeTeam: {
+          teamId: game.hTeam.teamId,
+          name: game.hTeam.teamName || game.hTeam.triCode,
+          score: game.hTeam.score,
+          stats: game.hTeam.linescores
+        },
+        awayTeam: {
+          teamId: game.vTeam.teamId,
+          name: game.vTeam.teamName || game.vTeam.triCode,
+          score: game.vTeam.score,
+          stats: game.vTeam.linescores
+        },
+        status: game.statusNum,
+        period: game.period.current,
+        clock: game.clock
+      }));
       
       return res.json({
         success: true,
-        count: response.data.data.length,
-        stats: response.data.data,
-        meta: response.data.meta
+        count: gameStats.length,
+        stats: gameStats,
+        date: date,
+        source: 'nba.net'
       });
     } else {
       // Mock response
@@ -347,8 +355,7 @@ router.get('/stats', async (req, res) => {
         message: 'Stats endpoint is working',
         count: 0,
         stats: [],
-        source: 'mock',
-        note: 'Set BALLDONTLIE_API_KEY environment variable for real data'
+        source: 'mock'
       });
     }
     
@@ -366,7 +373,7 @@ router.get('/stats', async (req, res) => {
  * /api/nba/scores/live:
  *   get:
  *     summary: Get live NBA scores
- *     description: Retrieve live NBA games using SPORTSDATA_API_KEY
+ *     description: Retrieve live NBA games using NBA Data API
  *     tags: [NBA]
  *     responses:
  *       200:
@@ -389,23 +396,31 @@ router.get('/stats', async (req, res) => {
  */
 router.get('/scores/live', async (req, res) => {
   try {
-    if (NBA_API_CONFIG.apiKey && NBA_API_CONFIG.apiKey !== 'your-api-key-here') {
-      const today = new Date().toISOString().split('T')[0];
-      const response = await axios.get(
-        `${NBA_API_CONFIG.baseURL}/scores/json/GamesByDate/${today}`,
-        {
-          headers: { 'Ocp-Apim-Subscription-Key': NBA_API_CONFIG.apiKey }
-        }
-      );
+    const today = new Date().toISOString().split('T')[0];
+    const response = await axios.get(
+      `http://data.nba.net/data/10s/prod/v1/${today}/scoreboard.json`
+    );
+    
+    if (response.data && response.data.games) {
+      // Filter for live games (statusNum 2 = in progress)
+      const liveGames = response.data.games.filter(game => game.statusNum === 2);
       
-      const liveGames = response.data.filter(game => 
-        game.Status === 'InProgress' || game.Status === 'Final'
-      );
+      const formattedGames = liveGames.map(game => ({
+        GameID: game.gameId,
+        Status: 'InProgress',
+        AwayTeam: game.vTeam.teamName || game.vTeam.triCode,
+        HomeTeam: game.hTeam.teamName || game.hTeam.triCode,
+        AwayTeamScore: game.vTeam.score,
+        HomeTeamScore: game.hTeam.score,
+        Quarter: `Q${game.period.current}`,
+        TimeRemaining: game.clock || '0:00'
+      }));
       
       return res.json({
         success: true,
-        count: liveGames.length,
-        games: liveGames
+        count: formattedGames.length,
+        games: formattedGames,
+        source: 'nba.net'
       });
     } else {
       // Mock live games
@@ -452,7 +467,7 @@ router.get('/scores/live', async (req, res) => {
  * /api/nba/players/stats:
  *   get:
  *     summary: Get player statistics
- *     description: Retrieve specific player game statistics using SPORTSDATA_API_KEY
+ *     description: Retrieve specific player game statistics using NBA Data API
  *     tags: [NBA]
  *     parameters:
  *       - in: query
@@ -495,46 +510,55 @@ router.get('/players/stats', async (req, res) => {
       });
     }
     
-    if (!date) {
-      return res.status(400).json({
-        success: false,
-        error: 'date parameter is required'
-      });
+    // Note: NBA Data API doesn't have a direct endpoint for player stats by date
+    // We'll return player information instead
+    const year = NBA_API_CONFIG.currentYear;
+    const playersResponse = await axios.get(
+      `http://data.nba.net/data/10s/prod/v1/${year}/players.json`
+    );
+    
+    if (playersResponse.data && playersResponse.data.league && playersResponse.data.league.standard) {
+      const player = playersResponse.data.league.standard.find(p => p.personId === playerId);
+      
+      if (player) {
+        return res.json({
+          success: true,
+          playerId: playerId,
+          playerInfo: {
+            PlayerID: player.personId,
+            Name: `${player.firstName} ${player.lastName}`,
+            Team: player.teamId,
+            Position: player.pos,
+            Height: player.heightFeet ? `${player.heightFeet}'${player.heightInches}"` : null,
+            Weight: player.weightPounds,
+            JerseyNumber: player.jersey,
+            College: player.collegeName
+          },
+          source: 'nba.net',
+          note: 'Full game stats not available via this API endpoint'
+        });
+      }
     }
     
-    if (NBA_API_CONFIG.apiKey && NBA_API_CONFIG.apiKey !== 'your-api-key-here') {
-      const response = await axios.get(
-        `${NBA_API_CONFIG.baseURL}/stats/json/PlayerGameStatsByDate/${date}/${playerId}`,
-        {
-          headers: { 'Ocp-Apim-Subscription-Key': NBA_API_CONFIG.apiKey }
-        }
-      );
-      
-      return res.json({
-        success: true,
-        playerStats: response.data
-      });
-    } else {
-      // Mock player stats
-      return res.json({
-        success: true,
-        message: 'Player stats endpoint is working',
-        playerId: playerId,
-        date: date,
-        playerStats: {
-          PlayerID: parseInt(playerId),
-          Name: 'LeBron James',
-          Points: 28,
-          Rebounds: 8,
-          Assists: 10,
-          Steals: 2,
-          Blocks: 1,
-          Turnovers: 3,
-          Minutes: 36
-        },
-        source: 'mock'
-      });
-    }
+    // Mock player stats if not found
+    return res.json({
+      success: true,
+      message: 'Player stats endpoint is working',
+      playerId: playerId,
+      date: date,
+      playerStats: {
+        PlayerID: parseInt(playerId),
+        Name: 'LeBron James',
+        Points: 28,
+        Rebounds: 8,
+        Assists: 10,
+        Steals: 2,
+        Blocks: 1,
+        Turnovers: 3,
+        Minutes: 36
+      },
+      source: 'mock'
+    });
     
   } catch (error) {
     console.error('Error fetching player stats:', error.message);
@@ -552,16 +576,27 @@ export const fetchNBAData = async () => {
   try {
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     
-    // 1. Fetch today's games
+    // 1. Fetch today's games from NBA Data API
     const gamesResponse = await axios.get(
-      NBA_API_CONFIG.endpoints.games.replace('{date}', today),
-      {
-        baseURL: NBA_API_CONFIG.baseURL,
-        headers: { 'Ocp-Apim-Subscription-Key': NBA_API_CONFIG.apiKey }
-      }
+      `http://data.nba.net/data/10s/prod/v1/${today}/scoreboard.json`
     );
     
-    const games = gamesResponse.data || [];
+    let games = [];
+    if (gamesResponse.data && gamesResponse.data.games) {
+      games = gamesResponse.data.games.map(game => ({
+        GameID: game.gameId,
+        HomeTeam: game.hTeam.triCode,
+        AwayTeam: game.vTeam.triCode,
+        HomeScore: game.hTeam.score,
+        AwayScore: game.vTeam.score,
+        Status: game.statusNum === 1 ? 'Scheduled' : 
+                game.statusNum === 2 ? 'InProgress' : 'Final',
+        Period: game.period.current,
+        Clock: game.clock,
+        StartTime: game.startTimeUTC,
+        Arena: game.arena.name
+      }));
+    }
     
     // 2. Save to MongoDB
     if (games.length > 0) {

@@ -15,121 +15,25 @@ const EnhancedNBAService = {
     }
 
     try {
-      console.log('🌐 Fetching from BallDon\'tLie API:', playerName);
-      const stats = await this.fetchFromBallDontLie(playerName);
+      console.log('🌐 Fetching from NBA Data API:', playerName);
+      const stats = await this.fetchFromNBAData(playerName);
       cache.set(cacheKey, stats);
       return stats;
     } catch (error) {
-      console.log('❌ BallDon\'tLie API failed, using mock data');
+      console.log('❌ NBA Data API failed, using mock data');
       return this.getMockPlayerStats(playerName);
     }
   },
 
-  // Fetch from BallDon'tLie using your API key
-  fetchFromBallDontLie: function(playerName) {
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.balldontlie.io',
-        path: '/v1/players?search=' + encodeURIComponent(playerName),
-        method: 'GET',
-        headers: {
-          'Authorization': process.env.BALLDONTLIE_API_KEY
-        },
-        timeout: 10000
-      };
-
-      const req = https.request(options, (res) => {
-        let data = '';
-
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const parsedData = JSON.parse(data);
-              
-              if (parsedData.data && parsedData.data.length > 0) {
-                const player = parsedData.data[0];
-                // Fetch player stats
-                EnhancedNBAService.fetchPlayerStats(player.id)
-                  .then((stats) => {
-                    const playerData = EnhancedNBAService.transformBallDontLieData(player, stats);
-                    resolve(playerData);
-                  })
-                  .catch((error) => {
-                    reject(error);
-                  });
-              } else {
-                reject(new Error('Player not found'));
-              }
-            } catch (parseError) {
-              reject(parseError);
-            }
-          } else {
-            reject(new Error('HTTP ' + res.statusCode + ': ' + data));
-          }
-        });
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      req.on('error', (error) => {
-        reject(error);
-      });
-
-      req.end();
-    });
-  },
-
-  fetchPlayerStats: function(playerId) {
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname: 'api.balldontlie.io',
-        path: '/v1/season_averages?player_ids[]=' + playerId,
-        method: 'GET',
-        headers: {
-          'Authorization': process.env.BALLDONTLIE_API_KEY
-        },
-        timeout: 10000
-      };
-
-      const req = https.request(options, (res) => {
-        let data = '';
-
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
-
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const parsedData = JSON.parse(data);
-              resolve(parsedData.data[0] || {});
-            } catch (parseError) {
-              reject(parseError);
-            }
-          } else {
-            reject(new Error('HTTP ' + res.statusCode));
-          }
-        });
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      req.on('error', (error) => {
-        reject(error);
-      });
-
-      req.end();
-    });
+  // Fetch from NBA Data API service
+  fetchFromNBAData: async function(playerName) {
+    try {
+      const nbaApiService = await import('./nbaApiService.js');
+      return await nbaApiService.default.getPlayerStats(playerName);
+    } catch (error) {
+      console.error('NBA Data API fetch error:', error);
+      return { playerName, found: false };
+    }
   },
 
   // Get betting odds from your scheduler cache
@@ -159,7 +63,7 @@ const EnhancedNBAService = {
     return this.getMockPredictions();
   },
 
-  transformBallDontLieData: function(player, stats) {
+  transformNBAData: function(player, stats) {
     return {
       name: player.first_name + ' ' + player.last_name,
       points: stats ? stats.pts : 0,
@@ -174,7 +78,7 @@ const EnhancedNBAService = {
       position: player.position || 'Unknown',
       games_played: stats ? stats.games_played : 0,
       minutes: stats ? stats.min : '0',
-      source: 'balldontlie',
+      source: 'nba_api',
       last_updated: new Date().toISOString()
     };
   },

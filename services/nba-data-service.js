@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 
 class NBADataService {
   constructor() {
-    this.baseURL = 'https://www.balldontlie.io/api/v1';
+    this.baseURL = 'http://data.nba.net/data/10s/prod/v1';
     this.cache = new Map();
     this.cacheTimeout = 5 * 60 * 1000;
   }

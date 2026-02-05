@@ -164,7 +164,7 @@ router.get('/', async (req, res) => {
  * /api/teams/games:
  *   get:
  *     summary: Get team games
- *     description: Retrieve games data from external API using BALLDONTLIE_API_KEY
+ *     description: Retrieve games data from external API
  *     tags: [Teams]
  *     parameters:
  *       - in: query
@@ -178,14 +178,8 @@ router.get('/', async (req, res) => {
  *         schema:
  *           type: array
  *           items:
- *             type: integer
- *         description: Filter by team IDs
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 0
- *         description: Page number for external API pagination
+ *             type: string
+ *         description: Filter by team IDs (NBA team abbreviations)
  *     responses:
  *       200:
  *         description: List of games from external API
@@ -205,27 +199,25 @@ router.get('/', async (req, res) => {
  */
 router.get('/games', async (req, res) => {
   try {
-    const { date, team_ids, page = 0 } = req.query;
+    const { date = '2024-02-04', team_ids } = req.query;
     
-    const params = new URLSearchParams();
-    if (date) params.append('dates[]', date);
+    // Use NBA Data API for games by date
+    const response = await axios.get(`http://data.nba.net/data/10s/prod/v1/${date}/scoreboard.json`);
+    
+    let games = response.data.games || [];
+    
+    // Filter by team IDs if provided
     if (team_ids) {
-      const ids = Array.isArray(team_ids) ? team_ids : [team_ids];
-      ids.forEach(id => params.append('team_ids[]', id));
+      const teamIdsArray = Array.isArray(team_ids) ? team_ids : [team_ids];
+      games = games.filter(game => 
+        teamIdsArray.includes(game.hTeam.teamId) || 
+        teamIdsArray.includes(game.vTeam.teamId)
+      );
     }
-    params.append('page', page);
-    
-    const response = await axios.get('https://api.balldontlie.io/v1/games', {
-      params,
-      headers: {
-        'Authorization': process.env.BALLDONTLIE_API_KEY
-      }
-    });
     
     res.json({
       success: true,
-      data: response.data.data,
-      meta: response.data.meta
+      data: games
     });
     
   } catch (error) {
@@ -242,14 +234,14 @@ router.get('/games', async (req, res) => {
  * /api/teams/games/{id}:
  *   get:
  *     summary: Get specific game by ID
- *     description: Retrieve a single game by ID using BALLDONTLIE_API_KEY
+ *     description: Retrieve a single game by ID
  *     tags: [Teams]
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
- *           type: integer
+ *           type: string
  *         description: Game ID
  *     responses:
  *       200:
@@ -272,26 +264,35 @@ router.get('/games/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const response = await axios.get(`https://api.balldontlie.io/v1/games/${id}`, {
-      headers: {
-        'Authorization': process.env.BALLDONTLIE_API_KEY
+    // Get schedule and filter by gameId
+    const response = await axios.get('http://data.nba.net/data/10s/prod/v1/2024/schedule.json');
+    
+    // Find the game by gameId
+    let gameData = null;
+    for (const month of response.data.league.standard) {
+      for (const game of month.games || []) {
+        if (game.gameId === id) {
+          gameData = game;
+          break;
+        }
       }
-    });
+      if (gameData) break;
+    }
     
-    res.json({
-      success: true,
-      data: response.data
-    });
-    
-  } catch (error) {
-    console.error('Error fetching game:', error.response?.data || error.message);
-    
-    if (error.response?.status === 404) {
+    if (!gameData) {
       return res.status(404).json({
         success: false,
         error: 'Game not found'
       });
     }
+    
+    res.json({
+      success: true,
+      data: gameData
+    });
+    
+  } catch (error) {
+    console.error('Error fetching game:', error.response?.data || error.message);
     
     res.status(error.response?.status || 500).json({
       success: false,
@@ -305,25 +306,14 @@ router.get('/games/:id', async (req, res) => {
  * /api/teams/players:
  *   get:
  *     summary: Get players data
- *     description: Retrieve players from external API using BALLDONTLIE_API_KEY
+ *     description: Retrieve players from external API
  *     tags: [Teams]
  *     parameters:
  *       - in: query
- *         name: search
- *         schema:
- *           type: string
- *         description: Search players by name
- *       - in: query
  *         name: team_id
  *         schema:
- *           type: integer
- *         description: Filter by team ID
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 0
- *         description: Page number for external API pagination
+ *           type: string
+ *         description: Filter by team ID (NBA team abbreviation)
  *     responses:
  *       200:
  *         description: List of players from external API
@@ -343,24 +333,21 @@ router.get('/games/:id', async (req, res) => {
  */
 router.get('/players', async (req, res) => {
   try {
-    const { search, team_id, page = 0 } = req.query;
+    const { team_id } = req.query;
     
-    const params = new URLSearchParams();
-    if (search) params.append('search', search);
-    if (team_id) params.append('team_ids[]', team_id);
-    params.append('page', page);
+    // Use NBA Data API for players
+    const response = await axios.get('http://data.nba.net/data/10s/prod/v1/2024/players.json');
     
-    const response = await axios.get('https://api.balldontlie.io/v1/players', {
-      params,
-      headers: {
-        'Authorization': process.env.BALLDONTLIE_API_KEY
-      }
-    });
+    let players = response.data.league.standard || [];
+    
+    // Filter by team if provided
+    if (team_id) {
+      players = players.filter(player => player.teamId === team_id);
+    }
     
     res.json({
       success: true,
-      data: response.data.data,
-      meta: response.data.meta
+      data: players
     });
     
   } catch (error) {
@@ -377,15 +364,8 @@ router.get('/players', async (req, res) => {
  * /api/teams/external:
  *   get:
  *     summary: Get teams from external API
- *     description: Retrieve teams data from external API using BALLDONTLIE_API_KEY
+ *     description: Retrieve teams data from external API
  *     tags: [Teams]
- *     parameters:
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 0
- *         description: Page number for external API pagination
  *     responses:
  *       200:
  *         description: List of teams from external API
@@ -405,19 +385,12 @@ router.get('/players', async (req, res) => {
  */
 router.get('/external', async (req, res) => {
   try {
-    const { page = 0 } = req.query;
-    
-    const response = await axios.get('https://api.balldontlie.io/v1/teams', {
-      params: { page },
-      headers: {
-        'Authorization': process.env.BALLDONTLIE_API_KEY
-      }
-    });
+    // Use NBA Data API for teams
+    const response = await axios.get('http://data.nba.net/data/10s/prod/v1/2024/teams.json');
     
     res.json({
       success: true,
-      data: response.data.data,
-      meta: response.data.meta
+      data: response.data.league.standard || []
     });
     
   } catch (error) {
@@ -434,7 +407,7 @@ router.get('/external', async (req, res) => {
  * /api/teams/stats:
  *   get:
  *     summary: Get team statistics
- *     description: Retrieve team stats from external API using BALLDONTLIE_API_KEY
+ *     description: Retrieve team stats from external API
  *     tags: [Teams]
  *     parameters:
  *       - in: query
@@ -442,20 +415,8 @@ router.get('/external', async (req, res) => {
  *         schema:
  *           type: array
  *           items:
- *             type: integer
- *         description: Filter by team IDs
- *       - in: query
- *         name: season
- *         schema:
- *           type: integer
- *           default: 2024
- *         description: NBA season year
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           default: 0
- *         description: Page number for external API pagination
+ *             type: string
+ *         description: Filter by team IDs (NBA team abbreviations)
  *     responses:
  *       200:
  *         description: Team statistics from external API
@@ -475,28 +436,22 @@ router.get('/external', async (req, res) => {
  */
 router.get('/stats', async (req, res) => {
   try {
-    const { team_ids, season = 2024, page = 0 } = req.query;
+    const { team_ids } = req.query;
     
-    const params = new URLSearchParams();
-    params.append('season', season);
-    params.append('page', page);
+    // Use NBA Data API for teams
+    const response = await axios.get('http://data.nba.net/data/10s/prod/v1/2024/teams.json');
     
+    let teams = response.data.league.standard || [];
+    
+    // Filter by team IDs if provided
     if (team_ids) {
-      const ids = Array.isArray(team_ids) ? team_ids : [team_ids];
-      ids.forEach(id => params.append('team_ids[]', id));
+      const teamIdsArray = Array.isArray(team_ids) ? team_ids : [team_ids];
+      teams = teams.filter(team => teamIdsArray.includes(team.teamId));
     }
-    
-    const response = await axios.get('https://api.balldontlie.io/v1/teams', {
-      params,
-      headers: {
-        'Authorization': process.env.BALLDONTLIE_API_KEY
-      }
-    });
     
     res.json({
       success: true,
-      data: response.data.data,
-      meta: response.data.meta
+      data: teams
     });
     
   } catch (error) {

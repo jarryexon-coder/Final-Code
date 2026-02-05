@@ -86,7 +86,6 @@ const SearchService = {
       });
 
       // Track sources used
-      if (results.players.length > 0) results.sources.push('balldontlie');
       if (results.teams.length > 0) results.sources.push('nba_api');
       if (results.games.length > 0) results.sources.push('sports_scheduler');
       if (includeMock) results.sources.push('mock_data');
