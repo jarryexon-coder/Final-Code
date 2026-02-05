@@ -1,0 +1,36 @@
+{
+  "success": true,
+  "message": "PrizePicks analytics",
+  "timestamp": "2026-02-05T21:16:04.844504Z",
+  "analytics": [
+    {
+      "id": "1",
+      "metric": "win_rate",
+      "value": "62.5%",
+      "trend": "up",
+      "description": "Overall win rate"
+    },
+    {
+      "id": "2",
+      "metric": "avg_edge",
+      "value": "+3.2%",
+      "trend": "stable",
+      "description": "Average projection edge"
+    },
+    {
+      "id": "3",
+      "metric": "best_sport",
+      "value": "NBA",
+      "trend": "up",
+      "description": "Most profitable sport"
+    },
+    {
+      "id": "4",
+      "metric": "roi",
+      "value": "+18.7%",
+      "trend": "up",
+      "description": "Return on investment"
+    }
+  ],
+  "count": 4
+}
