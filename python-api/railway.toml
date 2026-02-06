@@ -3,11 +3,9 @@ builder = "nixpacks"
 buildCommand = "pip install -r requirements.txt"
 
 [deploy]
-startCommand = "gunicorn api_server_complete:app"
+startCommand = "gunicorn app:app"
 healthcheckPath = "/api/health"
-restartPolicyType = "On Failure"
-# restartPolicyType = "Never"  
 
 [[services]]
-name = "api"
+name = "web"
 port = 8000
